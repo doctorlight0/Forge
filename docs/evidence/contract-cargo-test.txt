@@ -1,0 +1,17 @@
+$ cd contracts/escrow && cargo test
+
+running 9 tests
+test tests::cancel_unfunded ... ok
+test tests::create_and_fund_freelance ... ok
+test tests::arbitrated_dispute_and_resolve_state ... ok
+test tests::duplicate_milestone_release_blocked - should panic ... ok
+test tests::milestone_approve_and_release_flow ... ok
+test tests::rejects_same_buyer_seller - should panic ... ok
+test tests::non_arbitrator_cannot_resolve - should panic ... ok
+test tests::wrong_deposit_rejected - should panic ... ok
+test tests::time_locked_release_before_deadline_panics - should panic ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Doc-tests: 0
+
+Notes: unit tests cover create/fund/validation, milestone approve+partial release, duplicate milestone release prevention, time-lock pre-deadline release enforcement, arbitrated dispute/resolve state and authorization, cancel unfunded. Warnings present (unused variant/must_use in tests) but tests pass.

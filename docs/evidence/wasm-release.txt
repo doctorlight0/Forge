@@ -1,0 +1,1 @@
+8a1d02027640fe882d5e6bd75e8ade13e0b06b8316790ac0c390a4e52942eed6  contracts/escrow/target/wasm32-unknown-unknown/release/near_forge_escrow.wasm
