@@ -1,12 +1,13 @@
 {
   "name": "near-forge-backend",
+  "description": "Forge provider validation and NEAR Testnet proxy API",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "NODE_ENV=test node --test"
   },
   "dependencies": {
     "cors": "^2.8.5",

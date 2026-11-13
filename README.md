@@ -1,39 +1,48 @@
-# NEAR Forge
+# Forge
 
-NEAR developer infrastructure platform: **Wallet Explorer**, **Escrow Studio**, **Contract Library**, and **RPC Directory**.
+Forge is a NEAR Testnet developer workspace with four integrated modules:
 
-> Status: **active implementation (early scaffold)**. See [`WORK_PROGRESS.md`](WORK_PROGRESS.md) for live progress and [`FINAL_REPORT.md`](FINAL_REPORT.md) for acceptance status (when produced).
+- **Wallet Explorer** — authoritative account, balance, access-key, contract-code, transaction, asset, and staking lookups.
+- **Escrow Studio** — wallet-signed native NEAR escrow workflows backed by the Rust contract in `contracts/escrow`.
+- **Contract Library** — contract interfaces, source references, security constraints, and deployment recipes.
+- **RPC Directory** — curated Testnet infrastructure with live endpoint checks.
 
-## Modules
+Supabase stores only user-owned workspace metadata: saved public account IDs and contract-library bookmarks. It never authorizes escrow actions or replaces NEAR RPC/contract state.
 
-1. **Wallet Explorer** — real NEAR account search (named + implicit), balances, tx history, tokens, NFTs, staking, access keys, tx details via real RPC/indexed APIs.
-2. **Escrow Studio** — reusable Rust NEAR smart-contract escrow engine with four workflows: Freelance, Milestone, Time-locked, Arbitrated. Real on-chain state transitions; wallet-signed transactions (no seed phrases/private keys).
-3. **Contract Library** — reusable templates, source, docs, parameters, deploy instructions, and test results. *No contract claimed audited without independent audit.*
-4. **RPC Directory** — documented mainnet/testnet/archival RPCs, indexer APIs, explorers, faucets, SDKs, with endpoint connectivity checks. No invented URLs/prices/stats.
+## Repository
 
-## Repository layout
-
-```
-frontend/   # React + TypeScript + Vite + Tailwind UI
-backend/    # Node.js backend (API/indexing/proxy where appropriate)
-contracts/  # Rust NEAR smart contracts (escrow engine)
-docs/       # Deployment docs, specs, evidence
-scripts/    # Build/deploy/verify helpers
-tests/      # Cross-cutting test assets & evidence
+```text
+frontend/             React + TypeScript + Vite application
+backend/              Express provider proxy and validation API
+contracts/escrow/     Rust near-sdk native NEAR escrow contract
+supabase/migrations/  Reviewed, unapplied database migrations
+docs/                 Architecture, environment, security, and deployment runbooks
 ```
 
-## Development (WIP)
+## Local setup
 
-Prereqs: Node.js, npm, Rust toolchain (`cargo`, `rustc`), and NEAR tooling as needed.
+1. Copy `.env.example` to `.env` and insert Forge's dedicated Supabase publishable values.
+2. Keep `VITE_ESCROW_CONTRACT_ID` empty unless an actual deployed Testnet contract has been verified.
+3. Install and run each application:
 
-Setup/build/test instructions will be filled in as modules are implemented and verified. See `WORK_PROGRESS.md` for current state and blockers.
+```bash
+cd frontend && npm install && npm run dev
+cd backend && npm install && npm start
+```
 
-## Security
+Run verification:
 
-- Wallet-based signing only; the app never requests seed phrases or private keys.
-- No hardcoded secrets committed. Use `.env` locally (see `.env.example` when added).
-- Testnet deployment/spending requires explicit human authorization; receipts recorded only when actually performed.
+```bash
+cd frontend && npm test && npm run build
+cd backend && npm test
+cd contracts/escrow && cargo test
+```
 
-## License
+See [FORGE_AUDIT.md](FORGE_AUDIT.md), [FORGE_SUPABASE_ARCHITECTURE.md](FORGE_SUPABASE_ARCHITECTURE.md), and [FORGE_FINAL_REPORT.md](FORGE_FINAL_REPORT.md) for current readiness status.
 
-TBD (to be confirmed). 
+## Safety
+
+- Forge never requests seed phrases or private keys.
+- Wallets sign all NEAR transactions.
+- Supabase receives no private keys, authoritative balances, or transaction-success claims.
+- The escrow contract is unaudited and not represented as deployed or verified on Testnet.

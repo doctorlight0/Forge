@@ -1,1 +1,6 @@
-8a1d02027640fe882d5e6bd75e8ade13e0b06b8316790ac0c390a4e52942eed6  contracts/escrow/target/wasm32-unknown-unknown/release/near_forge_escrow.wasm
+$ cd contracts/escrow && cargo build --release --target wasm32-unknown-unknown
+PASS — 333K WASM built on 2026-11-12.
+
+05bac09002e16bbe1b5ab1c653aaa00b0e00a5ab3e35979a435b6993f9357567  contracts/escrow/target/wasm32-unknown-unknown/release/near_forge_escrow.wasm
+
+Compiler emitted target-feature warnings for atomics/core-redzone/simd from the active toolchain environment; build exited 0.

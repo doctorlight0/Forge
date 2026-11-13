@@ -1,84 +1,142 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { AccountState, WalletSelector } from '@near-wallet-selector/core'
-import { setupWalletSelector } from '@near-wallet-selector/core'
-import { setupModal } from '@near-wallet-selector/modal-ui'
-import type { WalletSelectorModal } from '@near-wallet-selector/modal-ui'
-import { setupMyNearWallet } from '@near-wallet-selector/my-near-wallet'
-import '@near-wallet-selector/modal-ui/styles.css'
-import { APP_NAME, ESCROW_CONTRACT_BY_NETWORK, NETWORKS, type NetworkId } from '../config'
+import { ESCROW_CONTRACT_ID, TESTNET } from '../config'
+import { connectWalletAdapter, disconnectActiveWallet, initializeWalletSelector } from './walletSelector'
 
-type Ctx = {
-  selector: WalletSelector | null
-  modal: WalletSelectorModal | null
-  accountId: string | null
-  accounts: Array<AccountState>
-  network: NetworkId
-  setNetwork: (n: NetworkId) => void
-  signIn: () => void
-  signOut: () => Promise<void>
-  escrowContractId: string | null
-  ready: boolean
-  error: string | null
+export type WalletOption = {
+  id: string
+  name: string
+  description: string
+  iconUrl: string
+  downloadUrl: string | null
+  available: boolean
+  type: string
 }
 
-const WalletCtx = createContext<Ctx | null>(null)
+type WalletContextValue = {
+  selector: WalletSelector | null
+  accountId: string | null
+  accounts: AccountState[]
+  activeWalletId: string | null
+  activeWalletName: string | null
+  wallets: WalletOption[]
+  walletModalOpen: boolean
+  connectingWalletId: string | null
+  signIn: () => void
+  closeWalletModal: () => void
+  connectWallet: (walletId: string) => Promise<void>
+  signOut: () => Promise<void>
+  ready: boolean
+  error: string | null
+  networkId: typeof TESTNET.networkId
+}
+
+const WalletContext = createContext<WalletContextValue | null>(null)
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const [network, setNetwork] = useState<NetworkId>('testnet')
   const [selector, setSelector] = useState<WalletSelector | null>(null)
-  const [modal, setModal] = useState<WalletSelectorModal | null>(null)
-  const [accounts, setAccounts] = useState<Array<AccountState>>([])
+  const [accounts, setAccounts] = useState<AccountState[]>([])
+  const [activeWalletId, setActiveWalletId] = useState<string | null>(null)
+  const [wallets, setWallets] = useState<WalletOption[]>([])
+  const [walletModalOpen, setWalletModalOpen] = useState(false)
+  const [connectingWalletId, setConnectingWalletId] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
+    let unsubscribe: (() => void) | undefined
+    void (async () => {
       try {
-        setReady(false)
-        setError(null)
-        const s = await setupWalletSelector({
-          network: network,
-          modules: [setupMyNearWallet()],
-        })
-        const contractId = ESCROW_CONTRACT_BY_NETWORK[network] || 'escrow.not-configured.near'
-        const m = setupModal(s, { contractId, description: `Connect to ${APP_NAME}` })
+        const { selector: nextSelector, issues } = await initializeWalletSelector()
         if (cancelled) return
-        setSelector(s)
-        setModal(m)
-        setAccounts(s.store.getState().accounts)
-        const sub = s.store.observable.subscribe((state) => {
+        setSelector(nextSelector)
+        const syncState = () => {
+          const state = nextSelector.store.getState()
           setAccounts(state.accounts)
-        })
-        setReady(true)
-        return () => sub.unsubscribe()
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to initialize wallet selector')
-        setReady(true)
+          setActiveWalletId(state.selectedWalletId)
+          setWallets(state.modules.map((module) => ({
+            id: module.id,
+            name: module.metadata.name,
+            description: module.metadata.description || 'NEAR-compatible wallet',
+            iconUrl: module.metadata.iconUrl,
+            downloadUrl: 'downloadUrl' in module.metadata ? module.metadata.downloadUrl : null,
+            available: module.metadata.available,
+            type: module.type,
+          })))
+        }
+        syncState()
+        if (issues.length) setError(issues.map((issue) => `${issue.providerName}: ${issue.message}`).join(' '))
+        const subscription = nextSelector.store.observable.subscribe(syncState)
+        unsubscribe = () => subscription.unsubscribe()
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Wallet selector failed to initialize')
+      } finally {
+        if (!cancelled) setReady(true)
       }
     })()
-    return () => { cancelled = true }
-  }, [network])
+    return () => { cancelled = true; unsubscribe?.() }
+  }, [])
 
-  const accountId = accounts.find((a) => a.active)?.accountId ?? accounts[0]?.accountId ?? null
-  const escrowContractId = ESCROW_CONTRACT_BY_NETWORK[network] ?? null
-
-  const value = useMemo<Ctx>(() => ({
-    selector, modal, accountId, accounts, network, setNetwork,
-    signIn: () => modal?.show(),
+  const accountId = accounts.find((account) => account.active)?.accountId ?? accounts[0]?.accountId ?? null
+  const activeWalletName = wallets.find((wallet) => wallet.id === activeWalletId)?.name ?? null
+  const value = useMemo<WalletContextValue>(() => ({
+    selector,
+    accountId,
+    accounts,
+    activeWalletId,
+    activeWalletName,
+    wallets,
+    walletModalOpen,
+    connectingWalletId,
+    signIn: () => {
+      setError(null)
+      setWalletModalOpen(true)
+    },
+    closeWalletModal: () => {
+      if (!connectingWalletId) setWalletModalOpen(false)
+    },
+    connectWallet: async (walletId) => {
+      if (!selector || connectingWalletId) return
+      const option = wallets.find((wallet) => wallet.id === walletId)
+      if (!option) {
+        setError(`Wallet adapter “${walletId}” is not registered.`)
+        return
+      }
+      if (!option.available) {
+        setError(`${option.name} is not installed in this browser.`)
+        return
+      }
+      setConnectingWalletId(walletId)
+      setError(null)
+      try {
+        await connectWalletAdapter(selector, walletId, ESCROW_CONTRACT_ID)
+        setWalletModalOpen(false)
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : `Could not connect ${option.name}.`)
+      } finally {
+        setConnectingWalletId(null)
+      }
+    },
     signOut: async () => {
       if (!selector) return
-      const w = await selector.wallet()
-      await w.signOut()
+      setError(null)
+      try {
+        await disconnectActiveWallet(selector)
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Could not disconnect the wallet.')
+      }
     },
-    escrowContractId, ready, error,
-  }), [selector, modal, accountId, accounts, network, escrowContractId, ready, error])
+    ready,
+    error,
+    networkId: TESTNET.networkId,
+  }), [selector, accountId, accounts, activeWalletId, activeWalletName, wallets, walletModalOpen, connectingWalletId, ready, error])
 
-  return <WalletCtx.Provider value={value}>{children}</WalletCtx.Provider>
+  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>
 }
 
 export function useWallet() {
-  const ctx = useContext(WalletCtx)
-  if (!ctx) throw new Error('useWallet must be used within WalletProvider')
-  return ctx
+  const context = useContext(WalletContext)
+  if (!context) throw new Error('useWallet must be used within WalletProvider')
+  return context
 }

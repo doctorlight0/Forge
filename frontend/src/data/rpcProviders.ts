@@ -1,42 +1,73 @@
-export type ProviderType = 'rpc' | 'indexer' | 'explorer' | 'faucet' | 'sdk'
+export type ProviderType = 'rpc' | 'indexer' | 'explorer' | 'faucet' | 'sdk' | 'tool'
+
 export type Provider = {
   id: string
   name: string
   type: ProviderType
-  network?: 'mainnet' | 'testnet' | 'multi'
-  archival?: boolean
   url: string
-  description: string
-  docsUrl?: string
-  auth?: string
-  rateLimit?: string
+  purpose: string
+  docsUrl: string
+  auth: string
+  rateLimit: string
+  archival: 'yes' | 'no' | 'plan-dependent' | 'not-applicable'
   notes?: string
   checkable: boolean
 }
 
 export const RPC_PROVIDERS: Provider[] = [
-  // Mainnet RPC
-  { id: 'near-mainnet-official', name: 'NEAR Official RPC (Mainnet)', type: 'rpc', network: 'mainnet', url: 'https://rpc.mainnet.near.org', description: 'Public NEAR mainnet JSON-RPC endpoint operated for the NEAR ecosystem.', docsUrl: 'https://docs.near.org/api/rpc/providers', auth: 'None for public access', rateLimit: 'Public/shared limits apply (see docs)', checkable: true },
-  { id: 'near-mainnet-fastnear', name: 'FASTNEAR (Mainnet)', type: 'rpc', network: 'mainnet', url: 'https://free.rpc.fastnear.com', description: 'Community RPC endpoint for mainnet (FastNear).', docsUrl: 'https://fastnear.com/', auth: 'None for public endpoint (plans may vary)', rateLimit: 'See provider docs', notes: 'Availability/performance subject to provider.', checkable: true },
-  { id: 'near-mainnet-archival-pagoda', name: 'Pagoda (Mainnet archival / enhanced, if configured)', type: 'rpc', network: 'mainnet', archival: true, url: 'https://rpc.mainnet.pagoda.co', description: 'Pagoda-hosted NEAR mainnet RPC endpoint; archival/enhanced features depend on plan/config.', docsUrl: 'https://docs.near.org/api/rpc/providers', auth: 'May require API key for some plans', rateLimit: 'Plan-dependent (see docs)', notes: 'Public reachability/features may vary; check docs.', checkable: true },
-  // Testnet RPC
-  { id: 'near-testnet-official', name: 'NEAR Official RPC (Testnet)', type: 'rpc', network: 'testnet', url: 'https://rpc.testnet.near.org', description: 'Public NEAR testnet JSON-RPC endpoint.', docsUrl: 'https://docs.near.org/api/rpc/providers', auth: 'None for public access', rateLimit: 'Public/shared limits apply (see docs)', checkable: true },
-  { id: 'near-testnet-fastnear', name: 'FASTNEAR (Testnet)', type: 'rpc', network: 'testnet', url: 'https://test.rpc.fastnear.com', description: 'Community RPC endpoint for testnet (FastNear).', docsUrl: 'https://fastnear.com/', auth: 'None for public endpoint (plans may vary)', rateLimit: 'See provider docs', checkable: true },
-  { id: 'near-testnet-archival-pagoda', name: 'Pagoda (Testnet, if configured)', type: 'rpc', network: 'testnet', archival: true, url: 'https://rpc.testnet.pagoda.co', description: 'Pagoda-hosted NEAR testnet RPC endpoint; features depend on plan/config.', docsUrl: 'https://docs.near.org/api/rpc/providers', auth: 'May require API key for some plans', rateLimit: 'Plan-dependent (see docs)', checkable: true },
-  // Indexers / APIs
-  { id: 'nearblocks-mainnet', name: 'NearBlocks API (Mainnet)', type: 'indexer', network: 'mainnet', url: 'https://api.nearblocks.io/v1', description: 'Explorer/indexer API for accounts, transactions, tokens, NFTs, and more (NearBlocks).', docsUrl: 'https://api.nearblocks.io/api-docs/', auth: 'Public endpoints available; API key may increase limits', rateLimit: 'Public limits apply; may return 429 under load', notes: 'Used by Wallet Explorer for history/tokens/NFTs/staking where supported.', checkable: false },
-  { id: 'nearblocks-testnet', name: 'NearBlocks API (Testnet)', type: 'indexer', network: 'testnet', url: 'https://api-testnet.nearblocks.io/v1', description: 'Explorer/indexer API for testnet (NearBlocks).', docsUrl: 'https://api.nearblocks.io/api-docs/', auth: 'Public endpoints available; API key may increase limits', rateLimit: 'Public limits apply; may return 429 under load', checkable: false },
-  { id: 'pagoda-enhanced-api', name: 'Pagoda Enhanced APIs', type: 'indexer', network: 'multi', url: 'https://near-nodes.io', description: 'Pagoda developer platform / enhanced APIs and node services (capabilities per plan).', docsUrl: 'https://docs.near.org/api/rpc/providers', auth: 'Typically requires account/API key', rateLimit: 'Plan-dependent', notes: 'Consult official docs for current endpoints and products.', checkable: false },
-  // Explorers
-  { id: 'nearblocks-explorer-mainnet', name: 'NearBlocks Explorer (Mainnet)', type: 'explorer', network: 'mainnet', url: 'https://nearblocks.io', description: 'Block explorer for NEAR mainnet: accounts, transactions, blocks, contracts.', docsUrl: 'https://nearblocks.io', auth: 'N/A', rateLimit: 'Web UI; API limits per NearBlocks API', checkable: false },
-  { id: 'nearblocks-explorer-testnet', name: 'NearBlocks Explorer (Testnet)', type: 'explorer', network: 'testnet', url: 'https://testnet.nearblocks.io', description: 'Block explorer for NEAR testnet.', docsUrl: 'https://testnet.nearblocks.io', auth: 'N/A', rateLimit: 'Web UI', checkable: false },
-  { id: 'nearscan-mainnet', name: 'NEAR Explorer (legacy/official references)', type: 'explorer', network: 'mainnet', url: 'https://explorer.near.org', description: 'NEAR explorer portal (features and availability may evolve; see NEAR docs for current recommended explorers).', docsUrl: 'https://docs.near.org', auth: 'N/A', rateLimit: 'N/A', notes: 'Refer to docs.near.org for up-to-date explorer guidance.', checkable: false },
-  // Faucets
-  { id: 'near-testnet-faucet', name: 'NEAR Testnet Faucet', type: 'faucet', network: 'testnet', url: 'https://near-faucet.io/', description: 'Community faucet for obtaining testnet NEAR (availability subject to provider).', docsUrl: 'https://docs.near.org/tools/faucet', auth: 'May require GitHub/login or captcha per provider', rateLimit: 'Per-provider limits apply', notes: 'Use only for testnet; never share seed phrases/private keys.', checkable: false },
-  { id: 'near-docs-faucet', name: 'NEAR Docs: Faucet & Testnet Accounts', type: 'faucet', network: 'testnet', url: 'https://docs.near.org/tools/faucet', description: 'Official documentation on testnet faucets and creating test accounts.', docsUrl: 'https://docs.near.org/tools/faucet', auth: 'N/A', rateLimit: 'N/A', checkable: false },
-  // SDKs & Tools
-  { id: 'near-sdk-rs', name: 'near-sdk-rs', type: 'sdk', network: 'multi', url: 'https://github.com/near/near-sdk-rs', description: 'Rust SDK for writing NEAR smart contracts.', docsUrl: 'https://docs.near.org/sdk/rust/introduction', auth: 'N/A', rateLimit: 'N/A', checkable: false },
-  { id: 'near-api-js', name: 'near-api-js', type: 'sdk', network: 'multi', url: 'https://github.com/near/near-api-js', description: 'JavaScript/TypeScript library for interacting with NEAR RPC and accounts.', docsUrl: 'https://docs.near.org/tools/near-api-js/quick-reference', auth: 'N/A', rateLimit: 'N/A', checkable: false },
-  { id: 'wallet-selector', name: 'NEAR Wallet Selector', type: 'sdk', network: 'multi', url: 'https://github.com/near/wallet-selector', description: 'Wallet integration library for NEAR dApps (wallet-based signing).', docsUrl: 'https://docs.near.org/tools/wallet-selector', auth: 'N/A', rateLimit: 'N/A', checkable: false },
-  { id: 'near-cli-rs', name: 'NEAR CLI (RS)', type: 'sdk', network: 'multi', url: 'https://github.com/near/near-cli-rs', description: 'Command-line interface for NEAR protocol operations (deploy, call, keys, etc.).', docsUrl: 'https://docs.near.org/tools/near-cli', auth: 'Local key management (never expose secrets)', rateLimit: 'N/A', checkable: false },
+  {
+    id: 'near-testnet-rpc', name: 'NEAR Testnet RPC', type: 'rpc', url: 'https://rpc.testnet.near.org',
+    purpose: 'Canonical public JSON-RPC endpoint for Testnet account, block, transaction, validator, and contract queries.',
+    docsUrl: 'https://docs.near.org/api/rpc/providers', auth: 'No API key for the public endpoint.',
+    rateLimit: 'Shared public limits apply; applications should retry with backoff.', archival: 'no', checkable: true,
+  },
+  {
+    id: 'fastnear-testnet-rpc', name: 'FASTNEAR Testnet RPC', type: 'rpc', url: 'https://test.rpc.fastnear.com',
+    purpose: 'Community-operated Testnet JSON-RPC endpoint useful as an alternate provider.',
+    docsUrl: 'https://fastnear.com/', auth: 'No key for the published public endpoint; commercial plans may differ.',
+    rateLimit: 'See FASTNEAR documentation; do not assume a guaranteed public quota.', archival: 'plan-dependent', checkable: true,
+  },
+  {
+    id: 'nearblocks-testnet-api', name: 'NearBlocks Testnet API', type: 'indexer', url: 'https://api-testnet.nearblocks.io/v3',
+    purpose: 'NearBlocks v3 indexed Testnet transactions and account asset views used by Wallet Explorer when available.',
+    docsUrl: 'https://api.nearblocks.io/api-docs/', auth: 'Basic public access; optional credentials can be supplied server-side only.',
+    rateLimit: 'Public requests can return HTTP 429; exact quotas depend on the provider plan.', archival: 'plan-dependent', checkable: false,
+  },
+  {
+    id: 'nearblocks-testnet-explorer', name: 'NearBlocks Testnet Explorer', type: 'explorer', url: 'https://testnet.nearblocks.io',
+    purpose: 'Human-readable Testnet accounts, blocks, contracts, transactions, and receipts.',
+    docsUrl: 'https://testnet.nearblocks.io', auth: 'None for browser access.', rateLimit: 'Not applicable to normal web use.', archival: 'not-applicable', checkable: false,
+  },
+  {
+    id: 'near-testnet-faucet-docs', name: 'NEAR Testnet Faucet Guide', type: 'faucet', url: 'https://docs.near.org/tools/faucet',
+    purpose: 'Official guidance for creating and funding Testnet development accounts.',
+    docsUrl: 'https://docs.near.org/tools/faucet', auth: 'Provider-specific login or verification may apply.',
+    rateLimit: 'Provider-specific limits apply.', archival: 'not-applicable', notes: 'Forge never collects a seed phrase or private key.', checkable: false,
+  },
+  {
+    id: 'near-sdk-rs', name: 'near-sdk-rs', type: 'sdk', url: 'https://github.com/near/near-sdk-rs',
+    purpose: 'Rust SDK used to build the Forge escrow contract.', docsUrl: 'https://docs.near.org/smart-contracts/anatomy/rust',
+    auth: 'None.', rateLimit: 'Not applicable.', archival: 'not-applicable', checkable: false,
+  },
+  {
+    id: 'near-api-js', name: 'near-api-js', type: 'sdk', url: 'https://github.com/near/near-api-js',
+    purpose: 'JavaScript utilities for NEAR RPC, accounts, keys, transactions, and contract interaction.',
+    docsUrl: 'https://docs.near.org/tools/near-api-js/quick-reference', auth: 'None.', rateLimit: 'Depends on the selected RPC provider.', archival: 'not-applicable', checkable: false,
+  },
+  {
+    id: 'wallet-selector', name: 'NEAR Wallet Selector', type: 'sdk', url: 'https://github.com/near/wallet-selector',
+    purpose: 'Official multi-wallet selection ecosystem used for user-controlled transaction signing.',
+    docsUrl: 'https://docs.near.org/tools/wallet-selector', auth: 'Wallet-controlled; no application custody of keys.', rateLimit: 'Not applicable.', archival: 'not-applicable', checkable: false,
+  },
+  {
+    id: 'near-cli-rs', name: 'NEAR CLI', type: 'tool', url: 'https://github.com/near/near-cli-rs',
+    purpose: 'Command-line deployment, view calls, signed transactions, and Testnet account operations.',
+    docsUrl: 'https://docs.near.org/tools/near-cli', auth: 'Local keychain or wallet flow; protect credentials.', rateLimit: 'Depends on the configured RPC.', archival: 'not-applicable', checkable: false,
+  },
+  {
+    id: 'near-lake-framework', name: 'NEAR Lake Framework', type: 'indexer', url: 'https://github.com/near/near-lake-framework-rs',
+    purpose: 'Framework for building custom indexers from NEAR Lake data streams.',
+    docsUrl: 'https://docs.near.org/data-infrastructure/near-lake-framework', auth: 'Cloud storage credentials/configuration may be required.',
+    rateLimit: 'Depends on the storage provider and deployment.', archival: 'yes', checkable: false,
+  },
 ]

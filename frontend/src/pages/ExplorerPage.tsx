@@ -1,185 +1,136 @@
 import { useState } from 'react'
-import { useWallet } from '../near/WalletContext'
-import { viewAccount, viewAccessKeys, viewAccountCode } from '../near/rpc'
-import { getAccountTxns, getFtTokens, getNftTokens, getStakingPools } from '../near/indexer'
+import { EXPLORER_ACCOUNT_URL, EXPLORER_TX_URL } from '../config'
+import { Icon } from '../components/Icon'
+import { EmptyState, PageIntro, Skeleton } from '../components/PageState'
+import { useForgeData } from '../data/ForgeDataContext'
+import { isValidAccountId, shortAccount, yoctoToNear } from '../near/format'
+import { getAccountTxns, getFtTokens, getNftTokens, getStakingPools, getTxnDetail, type IndexerResult } from '../near/indexer'
+import { viewAccessKeys, viewAccount, viewAccountCode } from '../near/rpc'
 
-function yoctoToNear(yocto: string | number) {
-  try {
-    const y = BigInt(yocto)
-    const whole = y / 10n ** 24n
-    const frac = (y % 10n ** 24n).toString().padStart(24, '0').slice(0, 5)
-    return `${whole}.${frac}`
-  } catch { return String(yocto) }
+type ExplorerData = {
+  accountId: string
+  account: any
+  keys: any[]
+  contract: { hasCode: boolean; codeHash?: string }
+  txns: IndexerResult<any[]>
+  fts: IndexerResult<any[]>
+  nfts: IndexerResult<any[]>
+  staking: IndexerResult<any[]>
+  hasNextTransactions: boolean
+}
+
+function providerMessage(result: IndexerResult<unknown>) {
+  if (!result.error) return null
+  return <div className="notice warning"><Icon name="alert"/><span><strong>Provider data unavailable</strong>{result.error}</span></div>
 }
 
 export default function ExplorerPage() {
-  const { network } = useWallet()
+  const { wallets, isWalletSaved, toggleWallet } = useForgeData()
   const [query, setQuery] = useState('')
+  const [data, setData] = useState<ExplorerData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [account, setAccount] = useState<any>(null)
-  const [keys, setKeys] = useState<any[]>([])
-  const [contract, setContract] = useState<{ hasCode: boolean; codeHash?: string } | null>(null)
-  const [txns, setTxns] = useState<{ data: any[] | null; error?: string; source?: string } | null>(null)
-  const [fts, setFts] = useState<{ data: any[] | null; error?: string; source?: string } | null>(null)
-  const [nfts, setNfts] = useState<{ data: any[] | null; error?: string; source?: string } | null>(null)
-  const [staking, setStaking] = useState<{ data: any[] | null; error?: string; source?: string } | null>(null)
   const [page, setPage] = useState(1)
+  const [pageCursors, setPageCursors] = useState<Record<number, string>>({})
+  const [selectedTx, setSelectedTx] = useState<any | null>(null)
+  const [txLoading, setTxLoading] = useState(false)
 
-  async function search(p = 1) {
-    const id = query.trim().toLowerCase()
-    if (!id) { setError('Enter a named (e.g. alice.near) or implicit (64-char hex) account ID.'); return }
-    const isImplicit = /^[0-9a-f]{64}$/.test(id)
-    const isNamed = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/.test(id)
-    if (!isImplicit && !isNamed) { setError('Invalid account format. Use a named account or 64-char implicit hex account.'); return }
-    setLoading(true); setError(null); setPage(p)
+  async function search(nextPage = 1, forceId?: string) {
+    const accountId = (forceId || query).trim().toLowerCase()
+    if (!isValidAccountId(accountId)) { setError('Enter a valid named account or a 64-character implicit Testnet account.'); return }
+    const cursor = nextPage > 1 ? pageCursors[nextPage] : undefined
+    if (nextPage > 1 && !cursor) { setError('That transaction page is no longer available. Refresh from page 1.'); return }
+    setQuery(accountId); setLoading(true); setError(null); setSelectedTx(null)
     try {
-      const [a, k, c] = await Promise.all([
-        viewAccount(network, id),
-        viewAccessKeys(network, id).catch(() => ({ keys: [] })),
-        viewAccountCode(network, id).catch(() => null),
+      const [account, keysResult, codeResult] = await Promise.all([
+        viewAccount(accountId), viewAccessKeys(accountId).catch(() => ({ keys: [] })), viewAccountCode(accountId).catch(() => null),
       ])
-      setAccount(a)
-      setKeys(k?.keys || [])
-      setContract(c ? { hasCode: (c.code_base64?.length || 0) > 0 && c.code_hash !== '11111111111111111111111111111111', codeHash: c.code_hash } : null)
-      const [t, f, n, s] = await Promise.all([
-        getAccountTxns(network, id, p, 25),
-        getFtTokens(network, id),
-        getNftTokens(network, id),
-        getStakingPools(network, id),
+      const [txResult, fts, nfts, staking] = await Promise.all([
+        getAccountTxns(accountId, cursor, 25), getFtTokens(accountId), getNftTokens(accountId), getStakingPools(accountId),
       ])
-      setTxns(t ? { data: t.data?.txns ?? null, error: t.error, source: t.source } : null)
-      setFts(f); setNfts(n); setStaking(s)
-    } catch (e: any) {
-      setAccount(null); setKeys([]); setContract(null); setTxns(null); setFts(null); setNfts(null); setStaking(null)
-      const msg = e?.message || 'Failed to load account'
-      if (/does not exist/i.test(msg) || /UNKNOWN_ACCOUNT/i.test(msg)) setError('Account not found on this network.')
-      else setError(msg)
+      setPage(nextPage)
+      setPageCursors((current) => {
+        const updated = nextPage === 1 || data?.accountId !== accountId ? {} : { ...current }
+        if (txResult.data?.nextPage) updated[nextPage + 1] = txResult.data.nextPage
+        else delete updated[nextPage + 1]
+        return updated
+      })
+      setData({
+        accountId, account, keys: keysResult?.keys || [],
+        contract: { hasCode: Boolean(codeResult?.code_base64) && codeResult?.code_hash !== '11111111111111111111111111111111', codeHash: codeResult?.code_hash },
+        txns: { ...txResult, data: txResult.data?.txns ?? null }, fts, nfts, staking,
+        hasNextTransactions: Boolean(txResult.data?.nextPage),
+      })
+    } catch (reason: any) {
+      const message = reason?.message || 'Unable to load the account.'
+      setData(null)
+      setError(/does not exist|UNKNOWN_ACCOUNT/i.test(message) ? 'Account not found on NEAR Testnet.' : message)
     } finally { setLoading(false) }
   }
 
-  return (
-    <div className="space-y-6">
-      <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-        <h2 className="text-lg font-semibold mb-2">Account Search</h2>
-        <p className="text-sm text-slate-400 mb-3">Real on-chain data via NEAR RPC and documented indexers (NearBlocks public API where available). Network: <b>{network}</b>.</p>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Named or implicit account (e.g. example.testnet)"
-            className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2" />
-          <button onClick={() => search(1)} disabled={loading} className="px-4 py-2 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 font-medium">
-            {loading ? 'Searching…' : 'Search'}
-          </button>
-        </div>
-        {error && <div className="mt-3 p-3 rounded border border-red-800 bg-red-950/40 text-red-200 text-sm">{error}</div>}
+  async function inspectTransaction(transaction: any) {
+    const hash = transaction.transaction_hash || transaction.hash || transaction.tx_hash
+    if (!hash) return
+    setSelectedTx({ ...transaction, _hash: hash }); setTxLoading(true)
+    const detail = await getTxnDetail(hash)
+    if (detail.data) setSelectedTx({ ...transaction, ...detail.data, _hash: hash })
+    setTxLoading(false)
+  }
+
+  return <div className="stack">
+    <PageIntro eyebrow="Public Testnet intelligence" title="Wallet Explorer" description="Inspect named and implicit accounts, balances, keys, contract code, transactions, assets, and staking data. Wallet connection is never required for public blockchain data." actions={data && <div className="page-actions"><button className="button secondary" onClick={() => void toggleWallet(data.accountId)}><Icon name={isWalletSaved(data.accountId) ? 'check' : 'spark'}/> {isWalletSaved(data.accountId) ? 'Saved' : 'Save account'}</button><button className="button secondary" onClick={() => void search(page, data.accountId)} disabled={loading}><Icon name="refresh"/> Refresh</button></div>}/>
+
+    <section className="panel enter">
+      <div className="input-group"><Icon name="search"/><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void search(1) }} placeholder="account.testnet or 64-character implicit account" aria-label="NEAR Testnet account"/><button className="button primary" onClick={() => void search(1)} disabled={loading}>{loading ? 'Searching…' : 'Inspect account'}</button></div>
+      <div className="panel-subtitle" style={{ marginTop: 9 }}>Queries use NEAR Testnet RPC and indexed provider data. Missing provider data is shown as unavailable—not as an empty on-chain result.</div>
+      {wallets.length > 0 && <div className="saved-items"><span>Saved accounts</span>{wallets.map((wallet) => <button type="button" className="badge neutral" key={wallet.accountId} onClick={() => { setQuery(wallet.accountId); void search(1, wallet.accountId) }}>{wallet.label || shortAccount(wallet.accountId, 9)}</button>)}</div>}
+      {error && <div className="notice error" style={{ marginTop: 14 }}><Icon name="alert"/><span><strong>Search failed</strong>{error}</span></div>}
+    </section>
+
+    {loading && <section className="panel"><div className="panel-header"><div className="panel-title"><span><Icon name="search"/></span><div><h2>Reading Testnet</h2><div className="panel-subtitle">Account state first, indexed collections second</div></div></div></div><Skeleton rows={6}/></section>}
+
+    {!loading && !data && !error && (
+      <EmptyState icon="search" title="Start with any Testnet account" detail="Try a named account ending in .testnet or paste a 64-character implicit account. Browsing stays public and disconnected." action={<button className="button secondary" onClick={() => { setQuery('testnet'); void search(1, 'testnet') }}>Try testnet</button>}/>
+    )}
+
+    {!loading && data && <>
+      <section className="metric-grid enter">
+        <div className="metric"><label>Available balance</label><strong>{yoctoToNear(data.account.amount)} Ⓝ</strong><small>{data.account.amount} yoctoNEAR</small></div>
+        <div className="metric"><label>Locked for staking</label><strong>{yoctoToNear(data.account.locked)} Ⓝ</strong><small>{data.account.locked} yoctoNEAR</small></div>
+        <div className="metric"><label>Storage used</label><strong>{Number(data.account.storage_usage).toLocaleString()}</strong><small>bytes on chain</small></div>
+        <div className="metric"><label>Account type</label><strong>{data.contract.hasCode ? 'Contract' : 'Standard'}</strong><small>{data.keys.length} access key{data.keys.length === 1 ? '' : 's'}</small></div>
       </section>
 
-      {loading && <div className="text-slate-400 text-sm">Loading account, keys, transactions, tokens, NFTs, and staking…</div>}
+      <div className="panel-grid">
+        <section className="panel enter"><div className="panel-header"><div className="panel-title"><span><Icon name="cube"/></span><div><h2>Account profile</h2><div className="panel-subtitle">Authoritative final RPC state</div></div></div><a className="link" href={EXPLORER_ACCOUNT_URL(data.accountId)} target="_blank" rel="noreferrer">Explorer <Icon name="external"/></a></div>
+          <div className="data-list">
+            <div className="data-row"><div className="data-main"><strong className="mono">{data.accountId}</strong><span>{/^[0-9a-f]{64}$/.test(data.accountId) ? 'Implicit account' : 'Named account'}</span></div><span className="badge">Testnet</span></div>
+            <div className="data-row"><div className="data-main"><strong>Code status</strong><span className="mono">{data.contract.codeHash || data.account.code_hash}</span></div><span className={`badge ${data.contract.hasCode ? '' : 'neutral'}`}>{data.contract.hasCode ? 'Deployed' : 'No code'}</span></div>
+            <div className="data-row"><div className="data-main"><strong>Storage paid at</strong><span>{data.account.storage_paid_at ?? 'Field not returned by current RPC schema'}</span></div></div>
+          </div>
+        </section>
 
-      {account && !loading && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <section className="rounded-xl border border-slate-800 p-4 bg-slate-900/30">
-            <h3 className="font-semibold mb-2">Account & Balance (RPC)</h3>
-            <dl className="text-sm space-y-1">
-              <div><dt className="inline text-slate-400">Account: </dt><dd className="inline">{query.trim().toLowerCase()}</dd></div>
-              <div><dt className="inline text-slate-400">Amount: </dt><dd className="inline">{yoctoToNear(account.amount)} NEAR</dd></div>
-              <div><dt className="inline text-slate-400">Locked: </dt><dd className="inline">{yoctoToNear(account.locked)} NEAR</dd></div>
-              <div><dt className="inline text-slate-400">Storage used: </dt><dd className="inline">{account.storage_usage} bytes</dd></div>
-              <div><dt className="inline text-slate-400">Code hash: </dt><dd className="inline break-all">{account.code_hash}</dd></div>
-              <div><dt className="inline text-slate-400">Contract account: </dt><dd className="inline">{contract?.hasCode ? 'Yes (has deployed code)' : 'No (regular account)'}</dd></div>
-            </dl>
-          </section>
+        <section className="panel enter"><div className="panel-header"><div className="panel-title"><span><Icon name="key"/></span><div><h2>Access keys</h2><div className="panel-subtitle">Full-access and function-call permissions</div></div></div><span className="badge neutral">{data.keys.length} keys</span></div>
+          {data.keys.length ? <div className="data-list" style={{ maxHeight: 275, overflow: 'auto' }}>{data.keys.map((key, index) => { const permission = key.access_key?.permission; const functionCall = typeof permission === 'object' ? permission.FunctionCall : null; return <div className="data-row" key={key.public_key || index}><div className="data-main"><strong className="mono">{shortAccount(key.public_key || 'unknown', 14)}</strong><span>{functionCall ? `FunctionCall → ${functionCall.receiver_id}` : String(permission || 'Unknown permission')} · nonce {key.access_key?.nonce ?? '—'}</span></div><span className={`badge ${functionCall ? 'neutral' : ''}`}>{functionCall ? 'Scoped' : 'Full access'}</span></div> })}</div> : <EmptyState icon="key" title="No keys returned" detail="The account has no visible access keys, or the provider could not return them."/>}
+        </section>
+      </div>
 
-          <section className="rounded-xl border border-slate-800 p-4 bg-slate-900/30">
-            <h3 className="font-semibold mb-2">Access Keys (RPC)</h3>
-            {keys.length === 0 ? <p className="text-sm text-slate-400">No access keys returned or unavailable.</p> : (
-              <ul className="text-sm space-y-2 max-h-64 overflow-auto">
-                {keys.map((k: any, i: number) => (
-                  <li key={i} className="border border-slate-800 rounded p-2">
-                    <div className="break-all text-slate-300">{k.public_key}</div>
-                    <div className="text-slate-400">Permission: {typeof k.access_key?.permission === 'string' ? k.access_key.permission : `FunctionCall (${k.access_key?.permission?.FunctionCall?.receiver_id || 'scoped'})`}</div>
-                    {k.access_key?.nonce != null && <div className="text-slate-500">Nonce: {k.access_key.nonce}</div>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+      <section className="panel enter"><div className="panel-header"><div className="panel-title"><span><Icon name="clock"/></span><div><h2>Transaction history</h2><div className="panel-subtitle">{data.txns.source} · cursor page {page}</div></div></div><div className="page-actions"><button className="button secondary compact" disabled={page <= 1 || loading} onClick={() => void search(page - 1, data.accountId)}>Previous</button><button className="button secondary compact" disabled={!data.hasNextTransactions || loading} onClick={() => void search(page + 1, data.accountId)}>Next</button></div></div>
+        {providerMessage(data.txns)}
+        {data.txns.data?.length ? <div className="table-wrap" style={{ marginTop: data.txns.error ? 12 : 0 }}><table className="data-table"><thead><tr><th>Transaction</th><th>Signer</th><th>Receiver</th><th>Action</th><th>Status</th></tr></thead><tbody>{data.txns.data.map((transaction, index) => { const hash = transaction.transaction_hash || transaction.hash || transaction.tx_hash || ''; const actions = Array.isArray(transaction.actions) ? transaction.actions.map((action: any) => action.action || action.method || action.type).filter(Boolean).join(', ') : 'Indexed action'; const status = transaction.outcomes?.status === true ? 'Success' : transaction.outcomes?.status === false ? 'Failed' : typeof transaction.status === 'string' ? transaction.status : 'Indexed'; return <tr key={hash || index} onClick={() => void inspectTransaction(transaction)} style={{ cursor: hash ? 'pointer' : 'default' }}><td><span className="link mono">{hash ? shortAccount(hash, 8) : 'Unavailable'}</span></td><td>{shortAccount(transaction.signer_account_id || transaction.predecessor_account_id || '—', 11)}</td><td>{shortAccount(transaction.receiver_account_id || transaction.receiver_id || '—', 11)}</td><td>{actions || '—'}</td><td><span className="badge neutral">{status}</span></td></tr> })}</tbody></table></div> : !data.txns.error && <EmptyState icon="clock" title="No indexed transactions" detail="The provider returned an empty page for this account."/>}
+      </section>
 
-          <section className="rounded-xl border border-slate-800 p-4 bg-slate-900/30 lg:col-span-2">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold">Transaction History (Indexer: {txns?.source || 'n/a'})</h3>
-              <div className="flex gap-2 text-sm">
-                <button disabled={page <= 1 || loading} onClick={() => search(page - 1)} className="px-2 py-1 border border-slate-700 rounded disabled:opacity-40">Prev</button>
-                <span className="px-2 py-1 text-slate-400">Page {page}</span>
-                <button disabled={loading || (txns?.data?.length || 0) < 25} onClick={() => search(page + 1)} className="px-2 py-1 border border-slate-700 rounded disabled:opacity-40">Next</button>
-              </div>
-            </div>
-            {txns?.error && <div className="text-amber-300 text-sm mb-2">Provider notice: {txns.error} {(txns.error.includes('429') || txns.error.includes('Rate')) ? '(rate limit — retry later or configure API key if supported)' : ''}</div>}
-            {!txns?.data || txns.data.length === 0 ? <p className="text-sm text-slate-400">{txns?.error ? 'No transaction data available due to provider error.' : 'No transactions found (or empty page).'}</p> : (
-              <div className="overflow-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-slate-400 text-left"><tr><th className="py-1 pr-2">Hash</th><th className="py-1 pr-2">Signer</th><th className="py-1 pr-2">Receiver</th><th className="py-1 pr-2">Actions</th><th className="py-1">Status</th></tr></thead>
-                  <tbody>
-                    {txns.data.map((t: any, i: number) => {
-                      const hash = t.transaction_hash || t.hash || t.tx_hash || '—'
-                      const signer = t.signer_account_id || t.predecessor_account_id || t.signer_id || '—'
-                      const receiver = t.receiver_account_id || t.receiver_id || '—'
-                      const actions = Array.isArray(t.actions) ? t.actions.map((a: any) => a.action || a.method || a.type).join(', ') : '—'
-                      const status = t.outcomes?.status ?? t.status ?? '—'
-                      return <tr key={i} className="border-t border-slate-800"><td className="py-1 pr-2 font-mono text-xs break-all max-w-[220px]">{hash}</td><td className="py-1 pr-2">{signer}</td><td className="py-1 pr-2">{receiver}</td><td className="py-1 pr-2">{String(actions)}</td><td className="py-1">{typeof status === 'object' ? JSON.stringify(status) : String(status)}</td></tr>
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <p className="text-xs text-slate-500 mt-2">Transaction details are best-effort from indexer payloads; for authoritative per-tx status use RPC tx_status with sender account ID.</p>
-          </section>
+      {selectedTx && <section className="panel enter"><div className="panel-header"><div className="panel-title"><span><Icon name="arrow"/></span><div><h2>Transaction detail</h2><div className="panel-subtitle mono">{selectedTx._hash}</div></div></div><div className="page-actions"><a className="button secondary compact" href={EXPLORER_TX_URL(selectedTx._hash)} target="_blank" rel="noreferrer">Open receipt <Icon name="external"/></a><button className="icon-button" onClick={() => setSelectedTx(null)} aria-label="Close transaction"><Icon name="close"/></button></div></div>{txLoading ? <Skeleton rows={4}/> : <pre className="code-block">{JSON.stringify(selectedTx, null, 2)}</pre>}</section>}
 
-          <section className="rounded-xl border border-slate-800 p-4 bg-slate-900/30">
-            <h3 className="font-semibold mb-2">NEP-141 Token Holdings (Indexer)</h3>
-            {fts?.error && <div className="text-amber-300 text-sm mb-2">Provider notice: {fts.error}</div>}
-            {!fts?.data || fts.data.length === 0 ? <p className="text-sm text-slate-400">{fts?.error ? 'Unavailable due to provider error.' : 'No fungible token holdings found.'}</p> : (
-              <ul className="text-sm space-y-1 max-h-64 overflow-auto">{fts.data.map((t: any, i: number) => (
-                <li key={i} className="border border-slate-800 rounded p-2">
-                  <div className="font-medium">{t.ft_meta?.symbol || t.symbol || t.contract || t.token_id || 'Token'}</div>
-                  <div className="text-slate-400 break-all">Contract: {t.contract || t.token_contract || '—'}</div>
-                  <div className="text-slate-400">Balance: {t.amount || t.balance || '—'}</div>
-                </li>
-              ))}</ul>
-            )}
-          </section>
+      <div className="panel-grid three">
+        <AssetPanel title="NEP-141 holdings" icon="cube" result={data.fts} empty="No fungible token holdings were returned." render={(token) => <><strong>{token.meta?.symbol || token.ft_meta?.symbol || token.symbol || token.contract || 'Token'}</strong><span>{token.contract || token.token_contract || 'Contract unavailable'} · balance {token.amount || token.balance || '—'}</span></>}/>
+        <AssetPanel title="NFT holdings" icon="spark" result={data.nfts} empty="No NFT holdings were returned." render={(token) => <><strong>{token.token_meta?.title || token.nft_meta?.title || token.title || token.token || token.token_id || 'NFT'}</strong><span>{token.contract || token.nft_contract_id || 'Contract unavailable'} · token {token.token || token.token_id || '—'}</span></>}/>
+        <AssetPanel title="Staking positions" icon="shield" result={data.staking} empty="No staking positions were returned." render={(position) => <><strong>{position.pool || position.pool_id || position.validator_id || 'Pool'}</strong><span>{position.staked || position.deposit || position.amount || 'Amount unavailable'}</span></>}/>
+      </div>
+    </>}
+  </div>
+}
 
-          <section className="rounded-xl border border-slate-800 p-4 bg-slate-900/30">
-            <h3 className="font-semibold mb-2">NFT Holdings (Indexer)</h3>
-            {nfts?.error && <div className="text-amber-300 text-sm mb-2">Provider notice: {nfts.error}</div>}
-            {!nfts?.data || nfts.data.length === 0 ? <p className="text-sm text-slate-400">{nfts?.error ? 'Unavailable due to provider error.' : 'No NFTs found.'}</p> : (
-              <ul className="text-sm space-y-1 max-h-64 overflow-auto">{nfts.data.map((t: any, i: number) => (
-                <li key={i} className="border border-slate-800 rounded p-2">
-                  <div className="font-medium">{t.nft_meta?.title || t.title || t.token_id || 'NFT'}</div>
-                  <div className="text-slate-400 break-all">Contract: {t.contract || t.nft_contract_id || '—'}</div>
-                  <div className="text-slate-400">Token ID: {t.token_id || '—'}</div>
-                </li>
-              ))}</ul>
-            )}
-          </section>
-
-          <section className="rounded-xl border border-slate-800 p-4 bg-slate-900/30 lg:col-span-2">
-            <h3 className="font-semibold mb-2">Staking Information (Indexer / best-effort)</h3>
-            {staking?.error && <div className="text-amber-300 text-sm mb-2">Provider notice: {staking.error}. Staking visibility depends on indexer support; RPC validator/pool queries may be needed for full detail.</div>}
-            {!staking?.data || staking.data.length === 0 ? <p className="text-sm text-slate-400">{staking?.error ? 'Staking data unavailable from configured indexer.' : 'No staking pools/positions found by indexer.'}</p> : (
-              <ul className="text-sm space-y-1">{staking.data.map((p: any, i: number) => (
-                <li key={i} className="border border-slate-800 rounded p-2">
-                  <div className="font-medium break-all">{p.pool || p.pool_id || p.validator_id || 'Pool'}</div>
-                  <div className="text-slate-400">Staked/Balance: {p.staked || p.deposit || p.amount || '—'}</div>
-                </li>
-              ))}</ul>
-            )}
-          </section>
-        </div>
-      )}
-
-      {!account && !loading && !error && (
-        <div className="text-sm text-slate-400 rounded-xl border border-dashed border-slate-800 p-6">Enter an account to view real on-chain balance, access keys, transactions, tokens, NFTs, and staking info. Invalid accounts and provider errors will be shown here.</div>
-      )}
-    </div>
-  )
+function AssetPanel({ title, icon, result, empty, render }: { title: string; icon: Parameters<typeof Icon>[0]['name']; result: IndexerResult<any[]>; empty: string; render: (item: any) => React.ReactNode }) {
+  return <section className="panel enter"><div className="panel-header"><div className="panel-title"><span><Icon name={icon}/></span><div><h2>{title}</h2><div className="panel-subtitle">{result.source}</div></div></div><span className="badge neutral">{result.data?.length || 0}</span></div>{providerMessage(result)}{result.data?.length ? <div className="data-list" style={{ marginTop: result.error ? 12 : 0, maxHeight: 300, overflow: 'auto' }}>{result.data.map((item, index) => <div className="data-row" key={index}><div className="data-main">{render(item)}</div></div>)}</div> : !result.error && <EmptyState icon={icon} title="Empty result" detail={empty}/>}</section>
 }

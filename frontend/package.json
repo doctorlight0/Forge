@@ -1,5 +1,6 @@
 {
   "name": "near-forge-frontend",
+  "description": "Forge NEAR Testnet developer workspace frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -15,20 +16,21 @@
     "@near-wallet-selector/meteor-wallet": "^10.1.4",
     "@near-wallet-selector/modal-ui": "^10.1.4",
     "@near-wallet-selector/my-near-wallet": "^10.1.4",
-    "near-api-js": "^6.5.1",
+    "@near-wallet-selector/sender": "^10.1.4",
+    "@supabase/supabase-js": "^2.119.0",
+    "buffer": "^6.0.3",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^6.3.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "typescript": "~5.6.2",
-    "vite": "^5.4.10",
-    "vitest": "^2.1.5"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
   }
 }

@@ -1,87 +1,91 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { WalletProvider, useWallet } from './near/WalletContext'
-import { NETWORKS } from './config'
-import ExplorerPage from './pages/ExplorerPage'
-import EscrowPage from './pages/EscrowPage'
-import LibraryPage from './pages/LibraryPage'
-import RpcDirectoryPage from './pages/RpcDirectoryPage'
+import { Icon, type IconName } from './components/Icon'
+import { Logo } from './components/Logo'
+import { Skeleton } from './components/PageState'
+import { WalletConnectDialog } from './components/WalletConnectDialog'
+import { ForgeDataProvider, useForgeData } from './data/ForgeDataContext'
+import { shortAccount } from './near/format'
 
-type Tab = 'explorer' | 'escrow' | 'library' | 'rpc'
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const ExplorerPage = lazy(() => import('./pages/ExplorerPage'))
+const EscrowPage = lazy(() => import('./pages/EscrowPage'))
+const LibraryPage = lazy(() => import('./pages/LibraryPage'))
+const RpcDirectoryPage = lazy(() => import('./pages/RpcDirectoryPage'))
+
+type PageId = 'home' | 'explorer' | 'escrow' | 'library' | 'rpc'
+const pages: { id: PageId; label: string; caption: string; icon: IconName }[] = [
+  { id: 'home', label: 'Overview', caption: 'Workspace home', icon: 'home' },
+  { id: 'explorer', label: 'Wallet Explorer', caption: 'Public account data', icon: 'search' },
+  { id: 'escrow', label: 'Escrow Studio', caption: 'Native NEAR workflows', icon: 'shield' },
+  { id: 'library', label: 'Contract Library', caption: 'Source and interfaces', icon: 'code' },
+  { id: 'rpc', label: 'RPC Directory', caption: 'Testnet infrastructure', icon: 'server' },
+]
+
+function initialPage(): PageId {
+  const hash = window.location.hash.slice(1)
+  return pages.some((page) => page.id === hash) ? hash as PageId : 'home'
+}
 
 function Shell() {
-  const { accountId, signIn, signOut, network, setNetwork, ready, error, escrowContractId } = useWallet()
-  const [tab, setTab] = useState<Tab>('explorer')
+  const { accountId, activeWalletName, networkId, signIn, signOut, ready, error } = useWallet()
+  const { status, statusLabel, statusMessage, sessionStatus, retry } = useForgeData()
+  const [page, setPage] = useState<PageId>(initialPage)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const active = useMemo(() => pages.find((item) => item.id === page)!, [page])
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'explorer', label: 'Wallet Explorer' },
-    { id: 'escrow', label: 'Escrow Studio' },
-    { id: 'library', label: 'Contract Library' },
-    { id: 'rpc', label: 'RPC Directory' },
-  ]
+  function navigate(next: string) {
+    const id = next as PageId
+    if (!pages.some((item) => item.id === id)) return
+    setPage(id); setMobileOpen(false); window.history.replaceState(null, '', `#${id}`)
+  }
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-950/90 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="text-xl font-bold tracking-tight">NEAR Forge</div>
-            <div className="text-xs text-slate-400">Integrated NEAR developer platform — real RPC/indexed data, wallet-signed actions</div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <label className="text-slate-400">Network</label>
-            <select
-              value={network}
-              onChange={(e) => setNetwork(e.target.value as any)}
-              className="bg-slate-900 border border-slate-700 rounded px-2 py-1"
-            >
-              <option value="testnet">Testnet</option>
-              <option value="mainnet">Mainnet</option>
-            </select>
-            {accountId ? (
-              <>
-                <span className="px-2 py-1 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">{accountId}</span>
-                <button onClick={() => signOut()} className="px-3 py-1 rounded border border-slate-700 hover:bg-slate-800">Disconnect</button>
-              </>
-            ) : (
-              <button onClick={signIn} disabled={!ready} className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 font-medium">
-                Connect Wallet
-              </button>
-            )}
-          </div>
+  useEffect(() => {
+    document.title = `${active.label} · Forge on NEAR Testnet`
+  }, [active])
+
+  return <div className="app-shell">
+    <div className="ambient ambient-a"/><div className="ambient ambient-b"/>
+    <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
+      <div className="sidebar-top"><Logo/><button className="icon-button mobile-only" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><Icon name="close"/></button></div>
+      <div className="network-pill"><span className="status-dot"/><div><strong>NEAR Testnet</strong><span>Safe development environment</span></div></div>
+      <nav className="primary-nav" aria-label="Product navigation">
+        <span className="nav-label">Platform</span>
+        {pages.map((item) => <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => navigate(item.id)} aria-current={page === item.id ? 'page' : undefined}>
+          <span className="nav-icon"><Icon name={item.icon}/></span><span><strong>{item.label}</strong><small>{item.caption}</small></span>
+        </button>)}
+      </nav>
+      <div className="sidebar-note"><Icon name="shield"/><div><strong>Testnet guardrail</strong><span>Mainnet configuration and signing paths are intentionally absent.</span></div></div>
+      <div className="sidebar-foot"><a href="https://docs.near.org" target="_blank" rel="noreferrer">NEAR docs <Icon name="external"/></a><span>Forge v0.3 · Testnet</span></div>
+    </aside>
+    {mobileOpen && <button className="sidebar-scrim" onClick={() => setMobileOpen(false)} aria-label="Close navigation"/>}
+
+    <div className="main-column">
+      <header className="topbar">
+        <div className="topbar-title"><button className="icon-button mobile-only" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Icon name="menu"/></button><div><span>{active.caption}</span><strong>{active.label}</strong></div></div>
+        <div className="topbar-actions">
+          <span className="testnet-badge"><span className="status-dot"/> Testnet</span>
+          <button type="button" className={`sync-badge ${status}`} title={statusMessage} onClick={() => { if (status !== 'synced' && status !== 'connecting') void retry() }}><Icon name="server"/> {statusLabel}</button>
+          {!ready ? <span className="wallet-loading">Loading wallets…</span> : accountId ? <div className="wallet-connected"><span className="avatar">{accountId[0].toUpperCase()}</span><div><strong title={accountId}>{shortAccount(accountId, 8)}</strong><span>{activeWalletName || 'Wallet'} · {networkId}</span></div><button className="icon-button" onClick={() => void signOut()} title="Disconnect wallet" aria-label="Disconnect wallet"><Icon name="logout"/></button></div> : <button className="button primary compact" onClick={signIn}><Icon name="wallet"/> Connect wallet</button>}
         </div>
-        <nav className="max-w-7xl mx-auto px-4 pb-2 flex flex-wrap gap-2">
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`px-3 py-1.5 rounded text-sm border ${tab === t.id ? 'bg-slate-100 text-slate-900 border-slate-100' : 'border-slate-700 hover:bg-slate-800 text-slate-300'}`}>
-              {t.label}
-            </button>
-          ))}
-        </nav>
       </header>
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {!ready && <div className="text-slate-400">Initializing wallet integration…</div>}
-        {error && <div className="mb-4 p-3 rounded border border-amber-700 bg-amber-950/40 text-amber-200 text-sm">Wallet init notice: {error}</div>}
-        {tab === 'escrow' && (
-          <div className="mb-4 text-xs text-slate-400">
-            Escrow contract ({network}): {escrowContractId || <span className="text-amber-300">not configured — set after authorized Testnet deployment</span>}. On-chain actions require wallet signature and a deployed contract address; no operations are simulated.
-          </div>
-        )}
-        {tab === 'explorer' && <ExplorerPage />}
-        {tab === 'escrow' && <EscrowPage />}
-        {tab === 'library' && <LibraryPage />}
-        {tab === 'rpc' && <RpcDirectoryPage />}
+      {error && <div className="global-notice warning"><Icon name="alert"/><span><strong>Wallet integration notice</strong>{error}</span></div>}
+      {status !== 'synced' && status !== 'connecting' && <div className="global-notice warning sync-notice"><Icon name="server"/><span><strong>{statusLabel} · session {sessionStatus}</strong>{statusMessage}</span><button className="button secondary compact" onClick={() => void retry()}><Icon name="refresh"/> Retry cloud sync</button></div>}
+      <main className="content">
+        <Suspense fallback={<div className="panel"><Skeleton rows={6}/></div>}>
+          {page === 'home' && <DashboardPage navigate={navigate}/>}
+          {page === 'explorer' && <ExplorerPage/>}
+          {page === 'escrow' && <EscrowPage/>}
+          {page === 'library' && <LibraryPage/>}
+          {page === 'rpc' && <RpcDirectoryPage/>}
+        </Suspense>
       </main>
-      <footer className="max-w-7xl mx-auto px-4 py-8 text-xs text-slate-500">
-        Security: never enter seed phrases or private keys. Testnet deployment/receipts shown only when actually verified. Data from real NEAR RPC and documented indexers; provider errors/rate limits surfaced honestly.
-      </footer>
+      <footer><span>Forge is an unaudited NEAR Testnet development tool.</span><span>No private keys · No simulated transactions · No Mainnet path</span></footer>
     </div>
-  )
+    <WalletConnectDialog/>
+  </div>
 }
 
 export default function App() {
-  return (
-    <WalletProvider>
-      <Shell />
-    </WalletProvider>
-  )
+  return <ForgeDataProvider><WalletProvider><Shell/></WalletProvider></ForgeDataProvider>
 }

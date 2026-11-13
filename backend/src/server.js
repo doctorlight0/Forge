@@ -1,83 +1,142 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import { fileURLToPath } from 'node:url'
 
 dotenv.config()
 
-const app = express()
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }))
-app.use(express.json())
-
-// Provider configuration (documented; no invented capabilities)
-const providers = {
-  mainnet: {
-    rpcs: [
-      { name: 'NEAR Official', url: 'https://rpc.mainnet.near.org' },
-      { name: 'FASTNEAR', url: 'https://free.rpc.fastnear.com' },
-    ],
-    indexer: 'https://api.nearblocks.io/v1',
-    explorer: 'https://nearblocks.io',
-  },
-  testnet: {
-    rpcs: [
-      { name: 'NEAR Official', url: 'https://rpc.testnet.near.org' },
-      { name: 'FASTNEAR', url: 'https://test.rpc.fastnear.com' },
-    ],
-    indexer: 'https://api-testnet.nearblocks.io/v1',
-    explorer: 'https://testnet.nearblocks.io',
-  },
+export const TESTNET_PROVIDERS = {
+  network: 'testnet',
+  rpcs: [
+    { name: 'NEAR Testnet RPC', url: 'https://rpc.testnet.near.org', archival: false },
+    { name: 'FASTNEAR Testnet RPC', url: 'https://test.rpc.fastnear.com', archival: 'provider-dependent' },
+  ],
+  indexer: 'https://api-testnet.nearblocks.io/v3',
+  explorer: 'https://testnet.nearblocks.io',
+  faucetDocs: 'https://docs.near.org/tools/faucet',
 }
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'near-forge-backend' }))
-app.get('/api/providers', (req, res) => {
-  const network = req.query.network
-  if (network === 'mainnet' || network === 'testnet') return res.json(providers[network])
-  res.json(providers)
-})
+const ACCOUNT_PATTERN = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/
+const IMPLICIT_PATTERN = /^[0-9a-f]{64}$/
 
-// Simple JSON-RPC connectivity check (proxy-safe server-side check)
-app.post('/api/check-endpoint', async (req, res) => {
-  const { url } = req.body || {}
-  if (!url || typeof url !== 'string' || !/^https?:\/\//.test(url)) return res.status(400).json({ ok: false, error: 'invalid url' })
-  const start = Date.now()
-  const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), 8000)
-  try {
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 'check', method: 'block', params: { finality: 'final' } }), signal: ctrl.signal })
-    const latencyMs = Date.now() - start
-    if (!r.ok) return res.json({ ok: false, latencyMs, error: `HTTP ${r.status}` })
-    const j = await r.json()
-    if (j.error) return res.json({ ok: false, latencyMs, error: j.error.message || 'rpc error' })
-    return res.json({ ok: true, latencyMs, blockHeight: j.result?.header?.height })
-  } catch (e) {
-    return res.json({ ok: false, latencyMs: Date.now() - start, error: e.message || 'request failed' })
-  } finally { clearTimeout(t) }
-})
+export function normalizeAccountId(value) {
+  const accountId = String(value || '').trim().toLowerCase()
+  const validLength = accountId.length >= 2 && accountId.length <= 64
+  return { accountId, valid: validLength && (IMPLICIT_PATTERN.test(accountId) || ACCOUNT_PATTERN.test(accountId)), type: IMPLICIT_PATTERN.test(accountId) ? 'implicit' : ACCOUNT_PATTERN.test(accountId) ? 'named' : 'invalid' }
+}
 
-// Optional indexer proxy (adds API key server-side if configured) - best effort
-app.get('/api/indexer/:network/account/:accountId/txns', async (req, res) => {
-  const { network, accountId } = req.params
-  if (!['mainnet','testnet'].includes(network)) return res.status(400).json({ error: 'invalid network' })
-  const base = network === 'mainnet' ? 'https://api.nearblocks.io/v1' : 'https://api-testnet.nearblocks.io/v1'
-  const page = req.query.page || '1'
-  const perPage = req.query.per_page || '25'
-  try {
-    const headers = { Accept: 'application/json' }
-    const key = network === 'mainnet' ? process.env.NEARBLOCKS_API_KEY_MAINNET : process.env.NEARBLOCKS_API_KEY_TESTNET
-    if (key) headers.Authorization = `Bearer ${key}`
-    const r = await fetch(`${base}/account/${encodeURIComponent(accountId)}/txns?page=${page}&per_page=${perPage}&order=desc`, { headers })
-    const text = await r.text()
-    res.status(r.status).type('application/json').send(text)
-  } catch (e) { res.status(502).json({ error: e.message }) }
-})
+function allowedOrigins() {
+  const configured = String(process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((value) => value.trim()).filter(Boolean)
+  return new Set(configured)
+}
 
-// Basic input validation example endpoint
-app.get('/api/validate-account', (req, res) => {
-  const id = String(req.query.accountId || '').trim().toLowerCase()
-  const isImplicit = /^[0-9a-f]{64}$/.test(id)
-  const isNamed = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/.test(id)
-  res.json({ accountId: id, valid: isImplicit || isNamed, type: isImplicit ? 'implicit' : isNamed ? 'named' : 'invalid' })
-})
+function error(res, status, code, message, details) {
+  return res.status(status).json({ ok: false, error: { code, message, ...(details ? { details } : {}) } })
+}
 
-const port = Number(process.env.PORT || 8787)
-app.listen(port, () => console.log(`near-forge backend listening on ${port}`))
+function buildAllowedRpcUrls() {
+  const urls = TESTNET_PROVIDERS.rpcs.map((provider) => provider.url)
+  const additional = String(process.env.RPC_CHECK_ALLOWLIST || '').split(',').map((value) => value.trim()).filter(Boolean)
+  return new Set([...urls, ...additional].map((value) => value.replace(/\/$/, '')))
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try { return await fetch(url, { ...options, signal: controller.signal }) }
+  finally { clearTimeout(timeout) }
+}
+
+export function createApp() {
+  const app = express()
+  const origins = allowedOrigins()
+  const allowedRpcUrls = buildAllowedRpcUrls()
+  const rate = new Map()
+
+  app.disable('x-powered-by')
+  app.use(cors({
+    origin(origin, callback) {
+      if (!origin || origins.has(origin)) return callback(null, true)
+      return callback(new Error('Origin is not allowed by CORS'))
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+  }))
+  app.use(express.json({ limit: '32kb' }))
+  app.use((req, res, next) => {
+    const key = req.ip || 'unknown'
+    const now = Date.now()
+    const current = rate.get(key)
+    if (!current || current.resetAt <= now) rate.set(key, { count: 1, resetAt: now + 60_000 })
+    else {
+      current.count += 1
+      if (current.count > 120) return error(res, 429, 'RATE_LIMITED', 'Too many API requests. Retry after one minute.')
+    }
+    next()
+  })
+  app.use((req, res, next) => {
+    const started = Date.now()
+    res.on('finish', () => {
+      if (process.env.NODE_ENV !== 'test') console.info(JSON.stringify({ method: req.method, path: req.path, status: res.statusCode, durationMs: Date.now() - started }))
+    })
+    next()
+  })
+
+  app.get('/api/health', (_req, res) => res.json({ ok: true, data: { service: 'forge-backend', network: 'testnet', timestamp: new Date().toISOString() } }))
+  app.get('/api/providers', (_req, res) => res.json({ ok: true, data: TESTNET_PROVIDERS }))
+  app.get('/api/validate-account', (req, res) => res.json({ ok: true, data: normalizeAccountId(req.query.accountId) }))
+
+  app.post('/api/check-endpoint', async (req, res) => {
+    const url = typeof req.body?.url === 'string' ? req.body.url.replace(/\/$/, '') : ''
+    if (!allowedRpcUrls.has(url)) return error(res, 400, 'ENDPOINT_NOT_ALLOWED', 'Endpoint must be a configured NEAR Testnet RPC.')
+    const started = Date.now()
+    try {
+      const response = await fetchWithTimeout(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 'forge-check', method: 'block', params: { finality: 'final' } }) })
+      const latencyMs = Date.now() - started
+      if (!response.ok) return error(res, 502, 'PROVIDER_HTTP_ERROR', `RPC returned HTTP ${response.status}`, { latencyMs })
+      const payload = await response.json()
+      if (payload.error) return error(res, 502, 'PROVIDER_RPC_ERROR', payload.error.message || 'RPC returned an error', { latencyMs })
+      return res.json({ ok: true, data: { reachable: true, latencyMs, blockHeight: payload.result?.header?.height ?? null, checkedAt: new Date().toISOString() } })
+    } catch (reason) {
+      return error(res, 502, 'PROVIDER_UNAVAILABLE', reason?.name === 'AbortError' ? 'RPC check timed out.' : 'RPC check failed.', { latencyMs: Date.now() - started })
+    }
+  })
+
+  app.get('/api/indexer/account/:accountId/txns', async (req, res) => {
+    const account = normalizeAccountId(req.params.accountId)
+    if (!account.valid) return error(res, 400, 'INVALID_ACCOUNT', 'A valid named or implicit Testnet account is required.')
+    const limit = Number(req.query.limit || 25)
+    const cursor = typeof req.query.next === 'string' ? req.query.next : ''
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50 || cursor.length > 2048 || (cursor && !/^[A-Za-z0-9+/=_-]+$/.test(cursor))) return error(res, 400, 'INVALID_PAGINATION', 'limit must be 1-50 and next must be a valid opaque cursor.')
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (cursor) params.set('next', cursor)
+    const url = `${TESTNET_PROVIDERS.indexer}/accounts/${encodeURIComponent(account.accountId)}/txns?${params}`
+    try {
+      const headers = { Accept: 'application/json' }
+      if (process.env.NEARBLOCKS_API_KEY_TESTNET) headers.Authorization = `Bearer ${process.env.NEARBLOCKS_API_KEY_TESTNET}`
+      const response = await fetchWithTimeout(url, { headers })
+      const payload = await response.text()
+      res.set('Cache-Control', 'private, max-age=10')
+      if (!response.ok) return error(res, response.status === 429 ? 429 : 502, response.status === 429 ? 'INDEXER_RATE_LIMITED' : 'INDEXER_ERROR', response.status === 429 ? 'NearBlocks rate limit reached.' : `NearBlocks returned HTTP ${response.status}`)
+      try { return res.json(JSON.parse(payload)) }
+      catch { return error(res, 502, 'INVALID_PROVIDER_RESPONSE', 'Indexer returned invalid JSON.') }
+    } catch (reason) {
+      return error(res, 502, 'INDEXER_UNAVAILABLE', reason?.name === 'AbortError' ? 'Indexer request timed out.' : 'Indexer request failed.')
+    }
+  })
+
+  app.use((_req, res) => error(res, 404, 'NOT_FOUND', 'API route not found.'))
+  app.use((reason, _req, res, _next) => {
+    if (reason?.message === 'Origin is not allowed by CORS') return error(res, 403, 'CORS_DENIED', reason.message)
+    if (reason?.type === 'entity.parse.failed') return error(res, 400, 'INVALID_JSON', 'Request body must contain valid JSON.')
+    return error(res, 500, 'INTERNAL_ERROR', 'Unexpected server error.')
+  })
+  return app
+}
+
+export function startServer(port = Number(process.env.PORT || 8787)) {
+  const server = createApp().listen(port, () => console.info(`Forge NEAR Testnet backend listening on ${port}`))
+  return server
+}
+
+const entry = process.argv[1] ? fileURLToPath(new URL(`file://${process.argv[1]}`)) : ''
+if (entry && fileURLToPath(import.meta.url) === entry) startServer()

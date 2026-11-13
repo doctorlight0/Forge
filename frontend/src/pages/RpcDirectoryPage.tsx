@@ -1,94 +1,156 @@
 import { useMemo, useState } from 'react'
+import { Icon } from '../components/Icon'
+import { EmptyState, PageIntro } from '../components/PageState'
+import { RPC_PROVIDERS, type ProviderType } from '../data/rpcProviders'
 import { checkEndpoint } from '../near/rpc'
-import { RPC_PROVIDERS } from '../data/rpcProviders'
+import { filterRpcDirectory } from './rpcDirectoryUtils'
 
-type CheckState = { ok: boolean; latencyMs?: number; error?: string; blockHeight?: number }
+type Check = { ok: boolean; latencyMs?: number; error?: string; blockHeight?: number }
+type Filter = 'all' | ProviderType
 
 export default function RpcDirectoryPage() {
-  const [checks, setChecks] = useState<Record<string, CheckState | 'loading'>>({})
-  const [filter, setFilter] = useState<'all' | 'mainnet' | 'testnet' | 'archival' | 'indexer' | 'explorer' | 'faucet' | 'sdk'>('all')
+  const [filter, setFilter] = useState<Filter>('all')
+  const [query, setQuery] = useState('')
+  const [checks, setChecks] = useState<Record<string, Check | 'loading'>>({})
+  const [checkingAll, setCheckingAll] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [copyError, setCopyError] = useState<string | null>(null)
 
-  const items = useMemo(() => {
-    if (filter === 'all') return RPC_PROVIDERS
-    if (filter === 'mainnet') return RPC_PROVIDERS.filter(p => p.network === 'mainnet' && p.type === 'rpc')
-    if (filter === 'testnet') return RPC_PROVIDERS.filter(p => p.network === 'testnet' && p.type === 'rpc')
-    if (filter === 'archival') return RPC_PROVIDERS.filter(p => p.archival)
-    if (filter === 'indexer') return RPC_PROVIDERS.filter(p => p.type === 'indexer')
-    if (filter === 'explorer') return RPC_PROVIDERS.filter(p => p.type === 'explorer')
-    if (filter === 'faucet') return RPC_PROVIDERS.filter(p => p.type === 'faucet')
-    if (filter === 'sdk') return RPC_PROVIDERS.filter(p => p.type === 'sdk')
-    return RPC_PROVIDERS
-  }, [filter])
+  const filtered = useMemo(() => filterRpcDirectory(RPC_PROVIDERS, query, filter), [filter, query])
+
+  const selected = useMemo(() => RPC_PROVIDERS.find((p) => p.id === selectedId) ?? null, [selectedId])
+  const checkableVisible = filtered.filter((item) => item.checkable)
+  const hasFilters = query.trim().length > 0 || filter !== 'all'
+
+  const filters: { id: Filter; label: string }[] = [
+    { id: 'all', label: 'All resources' },
+    { id: 'rpc', label: 'RPC' },
+    { id: 'indexer', label: 'Indexers' },
+    { id: 'explorer', label: 'Explorers' },
+    { id: 'faucet', label: 'Faucets' },
+    { id: 'sdk', label: 'SDKs' },
+    { id: 'tool', label: 'Tools' },
+  ]
 
   async function runCheck(id: string, url: string) {
-    setChecks(c => ({ ...c, [id]: 'loading' }))
-    const res = await checkEndpoint(url)
-    setChecks(c => ({ ...c, [id]: res }))
+    setChecks((current) => ({ ...current, [id]: 'loading' }))
+    const result = await checkEndpoint(url)
+    setChecks((current) => ({ ...current, [id]: result }))
   }
 
-  async function checkAllVisible() {
-    const targets = items.filter(i => i.checkable && i.url.startsWith('http'))
-    for (const t of targets) {
-      setChecks(c => ({ ...c, [t.id]: 'loading' }))
+  async function checkVisible() {
+    if (!checkableVisible.length) return
+    setCheckingAll(true)
+    setChecks((current) => ({ ...current, ...Object.fromEntries(checkableVisible.map((item) => [item.id, 'loading'])) }))
+    await Promise.all(checkableVisible.map((item) => runCheck(item.id, item.url)))
+    setCheckingAll(false)
+  }
+
+  async function copyUrl(providerId: string, url: string) {
+    setCopyError(null)
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable in this browser context.')
+      await navigator.clipboard.writeText(url)
+      setCopiedId(providerId)
+      setTimeout(() => setCopiedId((current) => (current === providerId ? null : current)), 1600)
+    } catch (reason) {
+      setCopyError(reason instanceof Error ? reason.message : 'Unable to copy endpoint URL.')
+      setCopiedId(null)
     }
-    await Promise.all(targets.map(async t => {
-      const res = await checkEndpoint(t.url)
-      setChecks(c => ({ ...c, [t.id]: res }))
-    }))
   }
 
-  return (
-    <div className="space-y-6">
-      <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-        <h2 className="text-lg font-semibold">RPC & Infrastructure Directory</h2>
-        <p className="text-sm text-slate-400 mt-1">Documented NEAR infrastructure endpoints/tools with on-demand connectivity checks (real JSON-RPC <code>block</code> probe). Endpoints, pricing, and stats are not invented — where details vary by plan, marked as "see provider docs".</p>
-        <div className="flex flex-wrap gap-2 mt-3 items-center">
-          <select value={filter} onChange={e => setFilter(e.target.value as any)} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm">
-            <option value="all">All</option>
-            <option value="mainnet">Mainnet RPCs</option>
-            <option value="testnet">Testnet RPCs</option>
-            <option value="archival">Archival RPCs</option>
-            <option value="indexer">Indexers / APIs</option>
-            <option value="explorer">Explorers</option>
-            <option value="faucet">Faucets</option>
-            <option value="sdk">SDKs / Tools</option>
-          </select>
-          <button onClick={checkAllVisible} className="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-sm font-medium">Run connectivity checks (visible)</button>
-        </div>
-      </section>
+  function clearAll() {
+    setQuery('')
+    setFilter('all')
+    setSelectedId(null)
+  }
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {items.map(item => {
-          const st = checks[item.id]
-          return (
-            <section key={item.id} className="rounded-xl border border-slate-800 p-4 bg-slate-900/30">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h3 className="font-semibold">{item.name}</h3>
-                  <div className="text-xs text-slate-400 mt-0.5">{item.type.toUpperCase()} · {item.network || 'multi-network'} {item.archival ? '· Archival' : ''}</div>
-                </div>
-                {item.checkable && item.url.startsWith('http') && (
-                  <button onClick={() => runCheck(item.id, item.url)} className="text-xs px-2 py-1 rounded border border-slate-700 hover:bg-slate-800">Check</button>
-                )}
-              </div>
-              <div className="mt-2 text-sm break-all"><span className="text-slate-400">Endpoint/URL: </span>{item.url.startsWith('http') ? <a className="text-cyan-400 hover:underline" href={item.url} target="_blank" rel="noreferrer">{item.url}</a> : <span>{item.url}</span>}</div>
-              <p className="text-sm text-slate-300 mt-2">{item.description}</p>
-              <dl className="text-xs text-slate-400 mt-2 space-y-1">
-                <div><dt className="inline">Docs: </dt><dd className="inline">{item.docsUrl ? <a className="text-cyan-400 hover:underline" href={item.docsUrl} target="_blank" rel="noreferrer">{item.docsUrl}</a> : 'See provider site'}</dd></div>
-                <div><dt className="inline">Auth: </dt><dd className="inline">{item.auth || 'See provider docs'}</dd></div>
-                <div><dt className="inline">Rate limits: </dt><dd className="inline">{item.rateLimit || 'See provider docs / plan-dependent'}</dd></div>
-                {item.notes && <div><dt className="inline">Notes: </dt><dd className="inline">{item.notes}</dd></div>}
-              </dl>
-              {st && (
-                <div className={`mt-3 text-xs rounded p-2 border ${st === 'loading' ? 'border-slate-700 text-slate-300' : st.ok ? 'border-emerald-800 text-emerald-300 bg-emerald-950/20' : 'border-red-800 text-red-300 bg-red-950/20'}`}>
-                  {st === 'loading' ? 'Checking connectivity…' : st.ok ? `Reachable · latency ${st.latencyMs}ms${st.blockHeight ? ` · block ${st.blockHeight}` : ''}` : `Unreachable/error · ${st.error || 'unknown'}${st.latencyMs ? ` · ${st.latencyMs}ms` : ''}`}
-                </div>
-              )}
-              {!item.checkable && <div className="mt-3 text-xs text-slate-500">Connectivity check: not applicable (non-RPC/tooling link).</div>}
-            </section>
-          )
-        })}
+  return <div className="stack">
+    <PageIntro eyebrow="Verified Testnet resources" title="RPC Directory" description="A curated Testnet-only catalog of RPCs, indexers, explorers, faucets, SDKs, and developer tools. Connectivity results are live checks—not stored uptime claims." actions={<button type="button" className="button primary" onClick={() => void checkVisible()} disabled={checkingAll || checkableVisible.length === 0}><Icon name="refresh" /> {checkingAll ? 'Checking…' : `Check visible RPCs${checkableVisible.length ? ` (${checkableVisible.length})` : ''}`}</button>} />
+
+    <section className="panel enter">
+      <div className="filter-bar" role="search" aria-label="Search RPC directory">
+        <label className="field search-field">
+          <span>Search resources</span>
+          <div className="input-group"><Icon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setQuery('') }} placeholder="Search by name, URL, provider type, or purpose" aria-label="Search RPC directory" /></div>
+        </label>
+        <div className="field filter-actions">
+          <span>&nbsp;</span>
+          <button type="button" className="button secondary" onClick={clearAll} disabled={!hasFilters}>Clear all</button>
+        </div>
       </div>
-    </div>
-  )
+      <div className="filters" role="tablist" aria-label="Resource type" style={{ marginTop: 14 }}>
+        {filters.map((item) => <button type="button" key={item.id} role="tab" aria-selected={filter === item.id} className={filter === item.id ? 'active' : ''} onClick={() => setFilter(item.id)}>{item.label}</button>)}
+      </div>
+      <div className="panel-subtitle" style={{ marginTop: 11 }} aria-live="polite">{filtered.length} of {RPC_PROVIDERS.length} resources shown. Archive, authentication, and rate-limit fields remain conservative where providers do not publish guarantees.</div>
+      {copyError && <div className="notice error" style={{ marginTop: 12 }}><Icon name="alert" /><span><strong>Copy failed</strong>{copyError}</span></div>}
+    </section>
+
+    {selected && <section className="panel enter selected-resource" aria-label="Selected resource details">
+      <div className="panel-header">
+        <div className="panel-title"><span><Icon name="server" /></span><div><h2>{selected.name}</h2><div className="panel-subtitle">{selected.type.toUpperCase()} · NEAR Testnet</div></div></div>
+        <div className="page-actions">
+          <button type="button" className="button secondary compact" onClick={() => void copyUrl(selected.id, selected.url)}><Icon name={copiedId === selected.id ? 'check' : 'copy'} /> {copiedId === selected.id ? 'Copied URL' : 'Copy URL'}</button>
+          <button type="button" className="icon-button" onClick={() => setSelectedId(null)} aria-label="Close selected resource details"><Icon name="close" /></button>
+        </div>
+      </div>
+      <p className="panel-subtitle" style={{ fontSize: 11, lineHeight: 1.7 }}>{selected.purpose}</p>
+      <div className="data-list" style={{ marginTop: 12 }}>
+        <div className="data-row"><div className="data-main"><strong>Endpoint / resource</strong><span className="mono" style={{ overflowWrap: 'anywhere' }}>{selected.url}</span></div></div>
+        <div className="data-row"><div className="data-main"><strong>Authentication</strong><span>{selected.auth}</span></div></div>
+        <div className="data-row"><div className="data-main"><strong>Rate limits</strong><span>{selected.rateLimit}</span></div></div>
+        <div className="data-row"><div className="data-main"><strong>Documentation</strong><span><a className="link" href={selected.docsUrl} target="_blank" rel="noreferrer">Open docs <Icon name="external" /></a></span></div></div>
+      </div>
+      <div className="check-result" style={{ marginTop: 12 }}>
+        {selected.checkable ? <CheckStatus id={selected.id} url={selected.url} check={checks[selected.id]} onRun={runCheck} /> : <div className="notice info"><Icon name="alert" /><span><strong>Connectivity probe not applicable</strong>This resource is not a JSON-RPC block endpoint; open its documentation or URL directly for verification.</span></div>}
+      </div>
+    </section>}
+
+    {filtered.length ? (
+      <section className="provider-grid results-fade" key={`${filter}|${query.trim().toLowerCase()}`}>
+        {filtered.map((provider, index) => {
+          const check = checks[provider.id]
+          const isSelected = selectedId === provider.id
+          return <article className={`panel provider-card enter interactive-card ${isSelected ? 'selected-card' : ''}`} style={{ animationDelay: `${index * 35}ms` }} key={provider.id} role="button" tabIndex={0} aria-pressed={isSelected} aria-label={`Select ${provider.name} for details`} onClick={() => setSelectedId(provider.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(provider.id) } }}>
+            <div className="panel-header">
+              <div className="panel-title"><span><Icon name={provider.type === 'rpc' ? 'server' : provider.type === 'sdk' || provider.type === 'tool' ? 'code' : provider.type === 'faucet' ? 'spark' : 'cube'} /></span><div><h2>{provider.name}</h2><div className="panel-subtitle">{provider.type.toUpperCase()} · NEAR Testnet</div></div></div>
+              <span className={`badge ${provider.archival === 'yes' ? '' : 'neutral'}`}>{provider.archival === 'yes' ? 'Archive' : provider.archival === 'plan-dependent' ? 'Archive varies' : provider.archival === 'no' ? 'Current state' : provider.type}</span>
+            </div>
+            <p className="panel-subtitle" style={{ fontSize: 10, lineHeight: 1.65 }}>{provider.purpose}</p>
+            <div className="link mono" style={{ marginTop: 11, fontSize: 8, overflowWrap: 'anywhere', cursor: 'pointer' }}>{provider.url}</div>
+            <dl className="provider-meta">
+              <div><dt>Authentication</dt><dd>{provider.auth}</dd></div>
+              <div><dt>Rate limits</dt><dd>{provider.rateLimit}</dd></div>
+              <div><dt>Archive access</dt><dd>{provider.archival.replace('-', ' ')}</dd></div>
+              <div><dt>Documentation</dt><dd><a className="link" href={provider.docsUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>Official / provider docs <Icon name="external" /></a></dd></div>
+            </dl>
+            {provider.notes && <div className="notice info" style={{ marginTop: 12 }}><Icon name="alert" /><span>{provider.notes}</span></div>}
+            <div className="check-result">
+              <div className="inline-actions" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                <button type="button" className="button secondary compact" onClick={() => void copyUrl(provider.id, provider.url)}><Icon name={copiedId === provider.id ? 'check' : 'copy'} /> {copiedId === provider.id ? 'Copied' : 'Copy URL'}</button>
+                <a className="button secondary compact" href={provider.url} target="_blank" rel="noreferrer"><Icon name="external" /> Open</a>
+              </div>
+              {provider.checkable ? <CheckStatus id={provider.id} url={provider.url} check={check} onRun={runCheck} /> : <span className="badge neutral" style={{ marginTop: 10 }}>Connectivity probe not applicable</span>}
+            </div>
+          </article>
+        })}
+      </section>
+    ) : (
+      <EmptyState icon="server" title="No resources match" detail="No Testnet resources match the current search and filter. Clear filters or try a different term." action={<button type="button" className="button secondary" onClick={clearAll}>Clear search and filters</button>} />
+    )}
+  </div>
+}
+
+function CheckStatus({ id, url, check, onRun }: { id: string; url: string; check?: Check | 'loading'; onRun: (id: string, url: string) => Promise<void> }) {
+  if (!check) return <button type="button" className="button secondary" style={{ marginTop: 10, width: '100%' }} onClick={(e) => { e.stopPropagation(); void onRun(id, url) }}><Icon name="server" /> Run connectivity check</button>
+  if (check === 'loading') return <div className="notice info" style={{ marginTop: 10 }}><Icon name="refresh" /><span><strong>Checking endpoint</strong>Waiting for a final block response…</span></div>
+  return <div className={`notice ${check.ok ? 'success' : 'error'}`} style={{ marginTop: 10 }}>
+    <Icon name={check.ok ? 'check' : 'alert'} />
+    <span>
+      <strong>{check.ok ? 'Reachable now' : 'Check failed'}</strong>
+      {check.ok ? `${check.latencyMs} ms observed · final block ${check.blockHeight ?? 'not returned'}` : `${check.error || 'Unknown error'}${check.latencyMs ? ` · ${check.latencyMs} ms` : ''}`}
+      <button type="button" className="link inline-link" onClick={(e) => { e.stopPropagation(); void onRun(id, url) }}>Check again</button>
+    </span>
+  </div>
 }

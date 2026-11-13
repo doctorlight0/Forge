@@ -1,17 +1,65 @@
-$ cd contracts/escrow && cargo test
+$ cd contracts/escrow && cargo test --lib
 
-running 9 tests
+running 55 tests
+test tests::account_escrows_history_pagination ... ok
+test tests::arbitrated_requires_arbitrator ... ok
+test tests::arbitrator_must_be_distinct ... ok
+test tests::cancel_funded_blocked ... ok
+test tests::cancel_non_buyer_blocked ... ok
 test tests::cancel_unfunded ... ok
+test tests::cancel_while_disputed_blocked ... ok
 test tests::create_and_fund_freelance ... ok
-test tests::arbitrated_dispute_and_resolve_state ... ok
-test tests::duplicate_milestone_release_blocked - should panic ... ok
-test tests::milestone_approve_and_release_flow ... ok
-test tests::rejects_same_buyer_seller - should panic ... ok
-test tests::non_arbitrator_cannot_resolve - should panic ... ok
-test tests::wrong_deposit_rejected - should panic ... ok
-test tests::time_locked_release_before_deadline_panics - should panic ... ok
+test tests::create_escrow_requires_storage_deposit ... ok
+test tests::description_too_long_rejected ... ok
+test tests::dispute_after_release_blocked ... ok
+test tests::dispute_by_buyer_or_seller ... ok
+test tests::dispute_flow_transitions ... ok
+test tests::dispute_without_arbitrator_blocked ... ok
+test tests::double_fund_blocked ... ok
+test tests::double_release_blocked ... ok
+test tests::double_resolve_blocked ... ok
+test tests::duplicate_milestone_release_blocked ... ok
+test tests::duplicate_refund_blocked ... ok
+test tests::freelance_release_full_pays_seller ... ok
+test tests::funding_deadline_enforced ... ok
+test tests::list_escrows_pagination ... ok
+test tests::milestone_multi_release_flow ... ok
+test tests::milestone_requires_items ... ok
+test tests::milestone_sum_must_equal_total ... ok
+test tests::milestones_rejected_for_freelance ... ok
+test tests::missing_escrow_operations_panic ... ok
+test tests::non_arbitrator_cannot_resolve ... ok
+test tests::non_buyer_cannot_fund ... ok
+test tests::non_buyer_cannot_release ... ok
+test tests::refund_after_release_blocked ... ok
+test tests::refund_failure_callback_restores_liability ... ok
+test tests::refund_funded_by_buyer ... ok
+test tests::refund_time_locked_before_deadline_by_arb_ok ... ok
+test tests::refund_time_locked_before_deadline_by_buyer_blocked ... ok
+test tests::rejects_same_buyer_seller ... ok
+test tests::rejects_zero_total ... ok
+test tests::release_failure_callback_partial ... ok
+test tests::release_failure_callback_restores_liability ... ok
+test tests::release_unapproved_milestone_blocked ... ok
+test tests::release_while_disputed_blocked ... ok
+test tests::resolve_failure_callback_restores_to_disputed ... ok
+test tests::resolve_full_refund_and_split ... ok
+test tests::resolve_split_mismatch_blocked ... ok
+test tests::seller_cannot_refund ... ok
+test tests::storage_balance_bounds_returned ... ok
+test tests::storage_deposit_credits_balance ... ok
+test tests::storage_withdraw_excess_returns_funds ... ok
+test tests::storage_withdraw_nothing_panics ... ok
+test tests::time_locked_release_after_deadline_ok ... ok
+test tests::time_locked_release_before_deadline_blocked ... ok
+test tests::timelock_requires_deadline ... ok
+test tests::too_many_milestones_rejected ... ok
+test tests::wrong_deposit_rejected ... ok
 
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
-Doc-tests: 0
+test result: ok. 55 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 
-Notes: unit tests cover create/fund/validation, milestone approve+partial release, duplicate milestone release prevention, time-lock pre-deadline release enforcement, arbitrated dispute/resolve state and authorization, cancel unfunded. Warnings present (unused variant/must_use in tests) but tests pass.
+Notes:
+- These are unit tests only (`cargo test --lib` on contracts/escrow/src/lib.rs). They cover create/fund/validation, milestone approve+release flows, duplicate-operation prevention, time-lock deadline enforcement, arbitrated dispute/resolve authorization and state transitions, unfunded/cancelled/blocked operations, storage deposit/withdraw accounting, callback failure recovery, pagination, and account history.
+- `cargo fmt --check` passes clean.
+- `cargo clippy --lib` passes clean (test/integration targets have pre-existing unused-import warnings only).
+- Sandbox integration test `contracts/escrow/tests/sandbox_integration.rs` (near-workspaces) exists but is blocked at link stage by a disk/link constraint, not a code error; it has not been run successfully in this session.

@@ -1,74 +1,33 @@
-import { NETWORKS, type NetworkId } from '../config'
+import { BACKEND_URL, TESTNET } from '../config'
 
-export type IndexerResult<T> = { data: T | null; error?: string; source?: string }
+export type IndexerResult<T> = { data: T | null; error?: string; source: string }
+export type AccountTxnPage = { txns: any[]; nextPage: string | null; prevPage: string | null }
 
 async function fetchJson(url: string): Promise<any> {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } })
-  if (res.status === 429) throw new Error('Rate limited by indexer (429)')
-  if (!res.ok) throw new Error(`Indexer HTTP ${res.status}`)
-  return res.json()
+  const response = await fetch(url, { headers: { Accept: 'application/json' } })
+  if (response.status === 429) throw new Error('NearBlocks rate limit reached (HTTP 429). Retry shortly.')
+  if (!response.ok) throw new Error(`Indexer returned HTTP ${response.status}`)
+  return response.json()
 }
 
-function base(network: NetworkId) {
-  return NETWORKS[network].indexerBaseUrl
+async function safe<T>(url: string, pick: (payload: any) => T, unavailable = 'Indexer data unavailable'): Promise<IndexerResult<T>> {
+  try { return { data: pick(await fetchJson(url)), source: 'NearBlocks Testnet API' } }
+  catch (reason) { return { data: null, error: reason instanceof Error ? reason.message : unavailable, source: 'NearBlocks Testnet API' } }
 }
 
-/** NearBlocks-compatible documented API (public). Requires no key for basic usage but may rate-limit. */
-export async function getAccountTxns(network: NetworkId, accountId: string, page = 1, perPage = 25): Promise<IndexerResult<{ txns: any[]; cursor?: any }>> {
-  const b = base(network)
-  if (!b) return { data: null, error: 'No indexer configured for this network' }
-  try {
-    // NearBlocks: /v1/account/{account}/txns
-    const json = await fetchJson(`${b}/account/${encodeURIComponent(accountId)}/txns?page=${page}&per_page=${perPage}&order=desc`)
-    const txns = json?.txns ?? json?.data ?? []
-    return { data: { txns, cursor: json?.cursor }, source: 'NearBlocks API' }
-  } catch (e) {
-    return { data: null, error: e instanceof Error ? e.message : 'Indexer request failed', source: 'NearBlocks API' }
-  }
+export function getAccountTxns(accountId: string, cursor?: string, limit = 25) {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (cursor) params.set('next', cursor)
+  const direct = `${TESTNET.indexerBaseUrl}/accounts/${encodeURIComponent(accountId)}/txns?${params}`
+  const proxied = `${BACKEND_URL}/api/indexer/account/${encodeURIComponent(accountId)}/txns?${params}`
+  return safe<AccountTxnPage>(import.meta.env.VITE_USE_BACKEND_PROXY === 'true' ? proxied : direct, (payload) => ({
+    txns: Array.isArray(payload?.data) ? payload.data : [],
+    nextPage: payload?.meta?.next_page || null,
+    prevPage: payload?.meta?.prev_page || null,
+  }))
 }
 
-export async function getFtTokens(network: NetworkId, accountId: string): Promise<IndexerResult<any[]>> {
-  const b = base(network)
-  if (!b) return { data: null, error: 'No indexer configured for this network' }
-  try {
-    const json = await fetchJson(`${b}/account/${encodeURIComponent(accountId)}/ft-tokens`)
-    return { data: json?.tokens ?? json?.inventory ?? json ?? [], source: 'NearBlocks API' }
-  } catch (e) {
-    return { data: null, error: e instanceof Error ? e.message : 'Indexer request failed', source: 'NearBlocks API' }
-  }
-}
-
-export async function getNftTokens(network: NetworkId, accountId: string): Promise<IndexerResult<any[]>> {
-  const b = base(network)
-  if (!b) return { data: null, error: 'No indexer configured for this network' }
-  try {
-    const json = await fetchJson(`${b}/account/${encodeURIComponent(accountId)}/nft-tokens`)
-    return { data: json?.tokens ?? json?.inventory ?? json ?? [], source: 'NearBlocks API' }
-  } catch (e) {
-    return { data: null, error: e instanceof Error ? e.message : 'Indexer request failed', source: 'NearBlocks API' }
-  }
-}
-
-export async function getStakingPools(network: NetworkId, accountId: string): Promise<IndexerResult<any[]>> {
-  const b = base(network)
-  if (!b) return { data: null, error: 'No indexer configured for this network' }
-  try {
-    // NearBlocks staking endpoints vary; try common path
-    const json = await fetchJson(`${b}/account/${encodeURIComponent(accountId)}/staking`)
-    const pools = json?.pools ?? json?.staking ?? (Array.isArray(json) ? json : [])
-    return { data: pools, source: 'NearBlocks API' }
-  } catch (e) {
-    return { data: null, error: e instanceof Error ? e.message : 'Staking data unavailable from indexer', source: 'NearBlocks API' }
-  }
-}
-
-export async function getTxnDetail(network: NetworkId, txHash: string, sender: string): Promise<IndexerResult<any>> {
-  const b = base(network)
-  if (!b) return { data: null, error: 'No indexer configured for this network' }
-  try {
-    const json = await fetchJson(`${b}/txns/${encodeURIComponent(txHash)}`)
-    return { data: json?.txns?.[0] ?? json, source: 'NearBlocks API' }
-  } catch (e) {
-    return { data: null, error: e instanceof Error ? e.message : 'Indexer request failed', source: 'NearBlocks API' }
-  }
-}
+export const getFtTokens = (accountId: string) => safe<any[]>(`${TESTNET.indexerBaseUrl}/accounts/${encodeURIComponent(accountId)}/assets/fts?limit=50`, (payload) => Array.isArray(payload?.data) ? payload.data : [])
+export const getNftTokens = (accountId: string) => safe<any[]>(`${TESTNET.indexerBaseUrl}/accounts/${encodeURIComponent(accountId)}/assets/nfts?limit=50`, (payload) => Array.isArray(payload?.data) ? payload.data : [])
+export const getStakingPools = (accountId: string) => safe<any[]>(`${TESTNET.indexerBaseUrl}/kitwallet/staking-deposits/${encodeURIComponent(accountId)}`, (payload) => Array.isArray(payload) ? payload : [], 'Staking data unavailable')
+export const getTxnDetail = (txHash: string) => safe<any>(`${TESTNET.indexerBaseUrl}/txns/${encodeURIComponent(txHash)}`, (payload) => payload?.data ?? null)

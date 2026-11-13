@@ -1,13 +1,11 @@
-$ cd frontend && npm run build
+$ cd frontend && npm test && npm run build
 
-> near-forge-frontend@0.1.0 build
-> tsc -b && vite build
+Vitest 5.1.0: 8 files passed, 23 tests passed.
 
-vite v5.4.21 building for production...
-✓ 595 modules transformed.
-dist/index.html                   0.40 kB │ gzip:   0.27 kB
-dist/assets/index-CHuipmjf.css   50.16 kB │ gzip:   9.31 kB
-dist/assets/index-DkgXcbEJ.js   973.32 kB │ gzip: 304.87 kB
-✓ built in 12.07s
+Vite 8.3.8 production build:
+- 1054 modules transformed.
+- dist/index.html: 1.02 kB (0.50 kB gzip).
+- main JS chunk: 2,349.06 kB (665.58 kB gzip).
+- build exited 0 with no TypeScript errors.
 
-Notes: build succeeded; Vite warned about large JS chunk and externalized util in dependency. No TypeScript errors in final build.
+Warnings: large main wallet/dependency chunk; browser externalization for crypto/util in wallet dependencies; direct eval warning in transitive js-sha256.
