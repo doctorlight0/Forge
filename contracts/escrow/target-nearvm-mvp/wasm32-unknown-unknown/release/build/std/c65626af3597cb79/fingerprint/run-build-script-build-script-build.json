@@ -1,0 +1,1 @@
+{"rustc":16194788426036805152,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[3778966308548958430,"build_script_build",false,13185326058435452149]],"local":[{"RerunIfChanged":{"output":"wasm32-unknown-unknown/release/build/std/c65626af3597cb79/run/stdout","paths":["build.rs"]}}],"rustflags":["-Ctarget-cpu=mvp"],"config":0,"compile_kind":0}

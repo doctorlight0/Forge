@@ -1,0 +1,8 @@
+/home/acknowlege/Desktop/near-forge/contracts/escrow/target-nearvm-mvp/release/build/serde_with_macros/78337bedaca68505/out/serde_with_macros-78337bedaca68505.d: /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/lib.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/apply.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/lazy_bool.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/utils.rs
+
+/home/acknowlege/Desktop/near-forge/contracts/escrow/target-nearvm-mvp/release/build/serde_with_macros/78337bedaca68505/out/libserde_with_macros-78337bedaca68505.so: /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/lib.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/apply.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/lazy_bool.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/utils.rs
+
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/lib.rs:
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/apply.rs:
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/lazy_bool.rs:
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_with_macros-3.24.0/src/utils.rs:

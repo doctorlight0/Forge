@@ -1,0 +1,10 @@
+/home/acknowlege/Desktop/near-forge/contracts/escrow/target-nearvm-mvp/wasm32-unknown-unknown/release/build/bs58/ea8f4728cba88c22/out/bs58-ea8f4728cba88c22.d: /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/lib.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/alphabet.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/decode.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/encode.rs
+
+/home/acknowlege/Desktop/near-forge/contracts/escrow/target-nearvm-mvp/wasm32-unknown-unknown/release/build/bs58/ea8f4728cba88c22/out/libbs58-ea8f4728cba88c22.rlib: /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/lib.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/alphabet.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/decode.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/encode.rs
+
+/home/acknowlege/Desktop/near-forge/contracts/escrow/target-nearvm-mvp/wasm32-unknown-unknown/release/build/bs58/ea8f4728cba88c22/out/libbs58-ea8f4728cba88c22.rmeta: /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/lib.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/alphabet.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/decode.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/encode.rs
+
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/lib.rs:
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/alphabet.rs:
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/decode.rs:
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bs58-0.5.1/src/encode.rs:

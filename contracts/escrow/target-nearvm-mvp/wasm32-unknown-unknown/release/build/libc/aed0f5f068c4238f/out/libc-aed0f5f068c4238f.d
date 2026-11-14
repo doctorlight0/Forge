@@ -1,0 +1,10 @@
+/home/acknowlege/Desktop/near-forge/contracts/escrow/target-nearvm-mvp/wasm32-unknown-unknown/release/build/libc/aed0f5f068c4238f/out/libc-aed0f5f068c4238f.d: /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/lib.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/macros.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/new/mod.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/new/common/mod.rs
+
+/home/acknowlege/Desktop/near-forge/contracts/escrow/target-nearvm-mvp/wasm32-unknown-unknown/release/build/libc/aed0f5f068c4238f/out/liblibc-aed0f5f068c4238f.rlib: /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/lib.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/macros.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/new/mod.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/new/common/mod.rs
+
+/home/acknowlege/Desktop/near-forge/contracts/escrow/target-nearvm-mvp/wasm32-unknown-unknown/release/build/libc/aed0f5f068c4238f/out/liblibc-aed0f5f068c4238f.rmeta: /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/lib.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/macros.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/new/mod.rs /home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/new/common/mod.rs
+
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/lib.rs:
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/macros.rs:
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/new/mod.rs:
+/home/acknowlege/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.191/src/new/common/mod.rs:

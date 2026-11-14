@@ -1,0 +1,9 @@
+[package]
+name = "wasm-checker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wasmparser = "0.83.0"
+
+[package.metadata.workspace]
